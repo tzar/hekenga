@@ -1,6 +1,15 @@
 require "hekenga/version"
-require "hekenga/simple"
+require "hekenga/dsl"
 
 module Hekenga
-  # Your code goes here...
+  class << self
+    def migration(&block)
+      self.registry.push(
+        Hekenga::DSL::Migration.new(&block)
+      )
+    end
+    def registry
+      @registry ||= []
+    end
+  end
 end
