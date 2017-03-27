@@ -1,23 +1,24 @@
+require 'hekenga/migration'
 require 'time'
 module Hekenga
   class DSL
     class Migration < Hekenga::DSL
       attr_reader :tasks
 
+      configures Hekenga::Migration
+
       def created(stamp = nil)
-        puts stamp
-        @created = Time.parse(stamp) if stamp
-        @created
+        @object.stamp = Time.parse(stamp)
       end
       def task(description = nil, &block)
-        (@tasks ||= []).push Hekenga::DSL::SimpleTask.new(description, &block)
+        @object.tasks.push Hekenga::DSL::SimpleTask.new(description, &block)
       end
       def per_document(description = nil, &block)
-        (@tasks ||= []).push Hekenga::DSL::DocumentTask.new(description, &block)
+        @object.tasks.push Hekenga::DSL::DocumentTask.new(description, &block)
       end
 
       def inspect
-        "<#{self.class} - #{self.description} (#{self.created.strftime("%Y-%m-%d %H:%M")})>"
+        "<#{self.class} - #{@object.description} (#{@object.stamp.strftime("%Y-%m-%d %H:%M")})>"
       end
     end
   end

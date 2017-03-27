@@ -1,3 +1,4 @@
+require 'hekenga/base_error'
 module Hekenga
   class Irreversible < Hekenga::BaseError
     def initialize(migration)

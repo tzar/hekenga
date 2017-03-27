@@ -1,6 +1,9 @@
 require "hekenga/version"
+require "hekenga/migration"
 require "hekenga/dsl"
 require "hekenga/config"
+require "hekenga/irreversible"
+require "hekenga/virtual_method"
 
 module Hekenga
   class << self
@@ -10,10 +13,11 @@ module Hekenga
     def config
       @config ||= Hekenga::Config.new
     end
-    def load!
+    def load_all!
+      return if @loaded
       Dir.glob(File.join(config.abs_dir, "*.rb")).each do |path|
         require path
-      end
+      end.tap { @loaded = true }
     end
     def migration(&block)
       self.registry.push(

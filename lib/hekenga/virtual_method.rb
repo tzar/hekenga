@@ -1,3 +1,4 @@
+require 'hekenga/base_error'
 module Hekenga
   class VirtualMethod < Hekenga::BaseError
     def initialize(klass, method)
