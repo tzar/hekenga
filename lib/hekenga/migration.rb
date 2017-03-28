@@ -77,7 +77,7 @@ module Hekenga
       end
     end
     def run_parallel_task(task_idx, ids)
-      # TODO - check for cancellation
+      return if log.cancel
       task = self.tasks[task_idx] or return
       with_setup(task) do
         process_batch(task, task.scope.in(_id: ids).to_a)
@@ -117,18 +117,19 @@ module Hekenga
     end
     def run_filters(task, record)
       task.filters.all? do |block|
-        instance_exec(record, &block)
+        @context.instance_exec(record, &block)
       end
     end
     def process_batch(task, records)
       to_persist = []
       fallbacks  = []
 
-      records.map do |record|
-        unless run_filters(task, record)
-          log_skipped(task, record)
-          next
-        end
+      filtered = records.partition do |record|
+        run_filters(task, record)
+      end
+      log_skipped(task, filtered[false])
+      return if filtered[true].empty?
+      filtered[true].map do |record|
         original_record = Marshal.load(Marshal.dump(record.as_document))
         task.up!(@context, record)
         if validate_record(record)
@@ -138,7 +139,7 @@ module Hekenga
       end.compact
       persist_batch(task, to_persist, fallbacks)
     end
-    def log_skipped(task, record)
+    def log_skipped(task, records)
       # TODO
     end
     def log_success(task, records)
@@ -168,6 +169,7 @@ module Hekenga
       # TODO - dump original_records + error to log, cancel w catastrophic failure
     end
     def validate_record(record)
+      # TODO - ability to skip validation
       if record.valid?
         true
       else
