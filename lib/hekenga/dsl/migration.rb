@@ -3,18 +3,25 @@ require 'time'
 module Hekenga
   class DSL
     class Migration < Hekenga::DSL
-      attr_reader :tasks
-
       configures Hekenga::Migration
 
+      def batch_size(size)
+        unless size.is_a?(Fixnum) && size > 0
+          raise "Invalid batch size #{size.inspect}"
+        end
+        @object.batch_size = size
+      end
+      def skip_prepare!
+        @object.skip_prepare = true
+      end
       def created(stamp = nil)
         @object.stamp = Time.parse(stamp)
       end
       def task(description = nil, &block)
-        @object.tasks.push Hekenga::DSL::SimpleTask.new(description, &block)
+        @object.tasks.push Hekenga::DSL::SimpleTask.new(description, &block).object
       end
       def per_document(description = nil, &block)
-        @object.tasks.push Hekenga::DSL::DocumentTask.new(description, &block)
+        @object.tasks.push Hekenga::DSL::DocumentTask.new(description, &block).object
       end
 
       def inspect

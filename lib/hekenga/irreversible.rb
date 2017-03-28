@@ -1,8 +1,8 @@
 require 'hekenga/base_error'
 module Hekenga
   class Irreversible < Hekenga::BaseError
-    def initialize(migration)
-      super("#{migration.class.to_s} is not a reversible migration.")
+    def initialize(task)
+      super("#{task.inspect} is not a reversible.")
     end
   end
 end

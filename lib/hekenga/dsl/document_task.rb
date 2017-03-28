@@ -1,44 +1,40 @@
+require 'hekenga/document_task'
 module Hekenga
   class DSL
     class DocumentTask < Hekenga::DSL
-      attr_reader :parallel, :disable_rules, :setups, :filters
+      configures Hekenga::DocumentTask
+
       def scope(scope)
-        @scope = scope if scope
-        @scope
+        @object.scope = scope
       end
       def parallel!
-        @parallel = true
+        @object.parallel = true
       end
-      def disable_callbacks(args = {})
-        [args[:on]].flatten.compact.each do |model|
-          (@disable_rules ||= []).push({
-            klass: model,
-            all:   true
-          })
-        end
+      def timeless!
+        @object.timeless = true
       end
       def disable_callback(callback, args = {})
         [args[:on]].flatten.compact.each do |model|
-          (@disable_rules ||= []).push({
+          @object.disable_rules.push({
             klass:    model,
             callback: callback
           })
         end
       end
       def setup(&block)
-        (@setups ||= []).push(&block)
+        @object.setups.push block
       end
 
       def filter(&block)
-        (@filters ||= []).push(&block)
+        @object.filters.push block
       end
 
       def up(&block)
-        (@ups ||= []).push(&block)
+        @object.ups.push block
       end
 
       def down(&block)
-        (@downs ||= []).push(&block)
+        @object.downs.push block
       end
     end
   end

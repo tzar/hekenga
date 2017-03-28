@@ -5,6 +5,7 @@ module Hekenga
       @object = self.class.build_klass&.new
       description(description) if description
       instance_exec(&block)
+      @object.validate! if @object.respond_to?(:validate!)
     end
     def description(desc = nil)
       @object.description = desc if @object && desc

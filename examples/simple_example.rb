@@ -34,6 +34,7 @@ Hekenga.migration do
   per_document "Set MyModel.zap to a random number if unset" do
     scope MyModel.where(zap: nil)
     parallel!
+    timeless!
     disable_callback :reindex, on: MyModel
 
     setup do

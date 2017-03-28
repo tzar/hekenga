@@ -1,12 +1,13 @@
+require 'hekenga/simple_task'
 module Hekenga
   class DSL
     class SimpleTask < Hekenga::DSL
-      attr_reader :ups, :downs
+      configures Hekenga::SimpleTask
       def up(&block)
-        (@ups ||= []).push(block)
+        @object.ups.push(block)
       end
       def down(&block)
-        (@downs ||= []).push(block)
+        @object.downs.push(block)
       end
     end
   end
