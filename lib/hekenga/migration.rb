@@ -7,7 +7,8 @@ module Hekenga
     attr_reader :tasks
 
     def initialize
-      @tasks = []
+      @tasks      = []
+      @logs       = {}
       @batch_size = 25
     end
 
@@ -28,22 +29,35 @@ module Hekenga
       @pkey ||= "#{timestamp}-#{desc_to_token}"
     end
 
-    def log
-      @log ||= Hekenga::Log.where(pkey: self.to_key).first
+    def log(task_idx = @active_idx)
+      raise "Missing task index" if task_idx.nil?
+      @logs[task_idx] ||= Hekenga::Log.find_by(
+        pkey: self.to_key,
+        task_idx: task_idx
+      )
+    end
+
+    def create_log!(task_idx = @active_idx)
+      @logs[task_idx] = Hekenga::Log.create(
+        migration: self,
+        task_idx:  task_idx
+      )
     end
 
     # API
-    def reload_log
-      log.reload
+    def reload_logs
+      @logs.each {|_, log| log.reload}
     end
     def performing?
-      !!log.started && !performed?
+      Hekenga::Log.where(pkey: self.to_key, done: false).any?
     end
     def performed?
-      !!log.done
+      !!log(self.tasks.length - 1).done
     end
     def perform!(task_idx = 0)
       task = @tasks[task_idx] or return
+      @active_idx = task_idx
+      create_log!
       case task
       when Hekenga::SimpleTask
         task.up!
@@ -77,8 +91,9 @@ module Hekenga
       end
     end
     def run_parallel_task(task_idx, ids)
-      return if log.cancel
+      return if log(task_idx).cancel
       task = self.tasks[task_idx] or return
+      @active_idx = task_idx
       with_setup(task) do
         process_batch(task, task.scope.in(_id: ids).to_a)
       end
@@ -131,7 +146,12 @@ module Hekenga
       return if filtered[true].empty?
       filtered[true].map do |record|
         original_record = Marshal.load(Marshal.dump(record.as_document))
-        task.up!(@context, record)
+        begin
+          task.up!(@context, record)
+        rescue => e
+          failed_apply!(e, record, records[0].id)
+          return
+        end
         if validate_record(record)
           to_persist.push(record)
           fallbacks.push(original_record)
@@ -140,10 +160,15 @@ module Hekenga
       persist_batch(task, to_persist, fallbacks)
     end
     def log_skipped(task, records)
-      # TODO
+      log.incr_and_return(
+        skipped:   records.length,
+        processed: records.length
+      )
     end
     def log_success(task, records)
-      # TODO
+      log.incr_and_return(
+        processed: records.length
+      )
     end
 
     def persist_batch(task, records, original_records)
@@ -165,15 +190,39 @@ module Hekenga
         failed_write!(e, original_records)
       end
     end
+    def failed_apply!(error, record, batch_start_id)
+      log.add_failure({
+        message:     error.to_s,
+        backtrace:   error.backtrace,
+        document:    Marshal.load(Marshal.dump(record.as_document)),
+        batch_start: batch_start_id
+      }, Hekenga::Failure::Error)
+      log.set(cancel: true, error: true, done: true)
+    end
     def failed_write!(error, original_records)
-      # TODO - dump original_records + error to log, cancel w catastrophic failure
+      log.add_failure({
+        message:     error.to_s,
+        backtrace:   error.backtrace,
+        documents:   original_records,
+        batch_start: original_records[0]["_id"]
+      }, Hekenga::Failure::Write)
+      log.set(cancel: true, error: true, done: true)
+    end
+    def failed_validation!(record)
+      log.add_failure({
+        doc_id:   record.id,
+        errors:   record.full_errors,
+        document: Marshal.load(Marshal.dump(record.as_document))
+      }, Hekenga::Failure::Validation)
+      log.set(error: true)
+      log.incr_and_return(processed: 1, invalid: 1)
     end
     def validate_record(record)
       # TODO - ability to skip validation
       if record.valid?
         true
       else
-        # TODO - log invalid
+        failed_validation!(record)
         false
       end
     end
