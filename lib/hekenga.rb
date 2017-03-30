@@ -1,3 +1,4 @@
+require "mongoid"
 require "hekenga/version"
 require "hekenga/migration"
 require "hekenga/dsl"
@@ -20,12 +21,20 @@ module Hekenga
       end.tap { @loaded = true }
     end
     def migration(&block)
-      self.registry.push(
-        Hekenga::DSL::Migration.new(&block)
-      )
+      Hekenga::DSL::Migration.new(&block).object.tap do |obj|
+        self.registry.push(obj)
+      end
+    end
+    def find_migration(key)
+      registry.detect do |migration|
+        migration.to_key == key
+      end
     end
     def registry
-      @registry ||= []
+      @registry || reset_registry
+    end
+    def reset_registry
+      @registry = []
     end
   end
 end

@@ -18,7 +18,7 @@ module Hekenga
 
     def up!(context, document)
       @ups.each do |block|
-        context.instance_eval(document, &block)
+        context.instance_exec(document, &block)
       end
     end
 

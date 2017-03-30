@@ -1,6 +1,8 @@
 require 'hekenga/invalid'
 require 'hekenga/context'
 require 'hekenga/parallel_job'
+require 'hekenga/master_process'
+require 'hekenga/log'
 module Hekenga
   class Migration
     attr_accessor :stamp, :description, :skip_prepare, :batch_size
@@ -37,11 +39,11 @@ module Hekenga
       )
     end
 
-    def create_log!(task_idx = @active_idx)
-      @logs[task_idx] = Hekenga::Log.create(
+    def create_log!(attrs = {})
+      @logs[@active_idx] = Hekenga::Log.create(attrs.merge(
         migration: self,
-        task_idx:  task_idx
-      )
+        task_idx:  @active_idx
+      ))
     end
 
     # API
@@ -54,28 +56,29 @@ module Hekenga
     def performed?
       !!log(self.tasks.length - 1).done
     end
-    def perform!(task_idx = 0)
+    def perform!
+      Hekenga::MasterProcess.new(self).run!
+    end
+    def perform_task!(task_idx = 0)
       task = @tasks[task_idx] or return
       @active_idx = task_idx
-      create_log!
       case task
       when Hekenga::SimpleTask
+        create_log!
         task.up!
-        perform!(task_idx + 1)
+        log_done!
       when Hekenga::DocumentTask
+        # TODO - online migration support (have log.total update, requeue)
+        create_log!(total: task.scope.count)
         if task.parallel
           start_parallel_task(task, task_idx)
-          # Parallel task will queue the next task when done
         else
           start_document_task(task, task_idx)
-          perform!(task_idx + 1)
+          log_done!
         end
       end
     end
     def recover!
-      # TODO
-    end
-    def report!
       # TODO
     end
     def rollback!
@@ -83,10 +86,19 @@ module Hekenga
     end
 
     # Internal perform methods
+    def check_for_completion
+      if log.processed == log.total
+        log_done!
+      end
+    end
+    def log_done!
+      log.set(done: true, finished: Time.now)
+    end
     def start_parallel_task(task, task_idx)
-      task.scope.pluck(:_id).each_slice(batch_size).each do |ids|
+      # TODO - support for crazy numbers of documents where pluck is too big
+      task.scope.asc(:_id).pluck(:_id).take(log.total).each_slice(batch_size).each do |ids|
         Hekenga::ParallelJob.perform_later(
-          self.to_key, task_idx, ids
+          self.to_key, task_idx, ids.map(&:to_s)
         )
       end
     end
@@ -95,12 +107,12 @@ module Hekenga
       task = self.tasks[task_idx] or return
       @active_idx = task_idx
       with_setup(task) do
-        process_batch(task, task.scope.in(_id: ids).to_a)
+        process_batch(task, task.scope.asc(:_id).in(_id: ids).to_a)
       end
     end
     def with_setup(task)
       @context = Hekenga::Context.new
-      setups.each do |block|
+      task.setups.each do |block|
         @context.instance_exec(&block)
       end
       # Disable specific callbacks
@@ -122,7 +134,7 @@ module Hekenga
       with_setup(task) do
         task.scope.asc(:_id).each do |record|
           records.push(record)
-          if records.length == BATCH_SIZE
+          if records.length == batch_size
             process_batch(task, records)
             records = []
           end
@@ -139,11 +151,11 @@ module Hekenga
       to_persist = []
       fallbacks  = []
 
-      filtered = records.partition do |record|
+      filtered = records.group_by do |record|
         run_filters(task, record)
       end
-      log_skipped(task, filtered[false])
-      return if filtered[true].empty?
+      log_skipped(task, filtered[false]) if filtered[false]
+      return unless filtered[true]
       filtered[true].map do |record|
         original_record = Marshal.load(Marshal.dump(record.as_document))
         begin
@@ -164,11 +176,13 @@ module Hekenga
         skipped:   records.length,
         processed: records.length
       )
+      check_for_completion
     end
     def log_success(task, records)
       log.incr_and_return(
         processed: records.length
       )
+      check_for_completion
     end
 
     def persist_batch(task, records, original_records)
@@ -197,7 +211,10 @@ module Hekenga
         document:    Marshal.load(Marshal.dump(record.as_document)),
         batch_start: batch_start_id
       }, Hekenga::Failure::Error)
-      log.set(cancel: true, error: true, done: true)
+      log_cancel!
+    end
+    def log_cancel!
+      log.set(cancel: true, error: true, done: true, finished: Time.now)
     end
     def failed_write!(error, original_records)
       log.add_failure({
@@ -206,16 +223,17 @@ module Hekenga
         documents:   original_records,
         batch_start: original_records[0]["_id"]
       }, Hekenga::Failure::Write)
-      log.set(cancel: true, error: true, done: true)
+      log_cancel!
     end
     def failed_validation!(record)
       log.add_failure({
         doc_id:   record.id,
-        errors:   record.full_errors,
+        errs:     record.full_errors,
         document: Marshal.load(Marshal.dump(record.as_document))
       }, Hekenga::Failure::Validation)
       log.set(error: true)
-      log.incr_and_return(processed: 1, invalid: 1)
+      log.incr_and_return(processed: 1, unvalid: 1)
+      check_for_completion
     end
     def validate_record(record)
       # TODO - ability to skip validation
