@@ -228,7 +228,7 @@ module Hekenga
     def failed_validation!(record)
       log.add_failure({
         doc_id:   record.id,
-        errs:     record.full_errors,
+        errs:     record.errors.full_messages,
         document: Marshal.load(Marshal.dump(record.as_document))
       }, Hekenga::Failure::Validation)
       log.set(error: true)

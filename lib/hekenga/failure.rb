@@ -11,6 +11,10 @@ module Hekenga
 
     index({pkey:   1})
     index({log_id: 1})
+
+    def self.lookup(log_id, task_idx)
+      where(log_id: log_id, task_idx: task_idx)
+    end
   end
 end
 require 'hekenga/failure/error'
