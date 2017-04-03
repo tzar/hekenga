@@ -5,6 +5,7 @@ module Hekenga
       field :backtrace
       field :document
       field :batch_start
+      field :simple, default: false
     end
   end
 end

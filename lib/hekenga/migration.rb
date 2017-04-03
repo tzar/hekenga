@@ -65,8 +65,12 @@ module Hekenga
       case task
       when Hekenga::SimpleTask
         create_log!
-        # TODO - handle errors in task.up!
-        task.up!
+        begin
+          task.up!
+        rescue => e
+          simple_failure!(e)
+          return
+        end
         log_done!
       when Hekenga::DocumentTask
         # TODO - online migration support (have log.total update, requeue)
@@ -217,6 +221,14 @@ module Hekenga
     end
     def write_records!(klass, records)
       klass.collection.insert_many(records.map(&:as_document))
+    end
+    def simple_failure!(error)
+      log.add_failure({
+        message:   error.to_s,
+        backtrace: error.backtrace,
+        simple:    true
+      }, Hekenga::Failure::Error)
+      log_cancel!
     end
     def failed_apply!(error, record, batch_start_id)
       log.add_failure({

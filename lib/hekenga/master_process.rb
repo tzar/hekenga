@@ -63,9 +63,11 @@ module Hekenga
       until @migration.log(idx).reload.done
         @active_thread.join unless @active_thread.alive?
         report_status(task, idx)
+        return if @migration.log(idx).cancel
         sleep Hekenga.config.report_sleep
       end
       report_status(task, idx)
+      return if @migration.log(idx).cancel
       report_errors(idx)
       print "Completed\n"
     end
