@@ -37,4 +37,5 @@ Gem::Specification.new do |spec|
 
   spec.add_runtime_dependency "mongoid", "~> 5"
   spec.add_runtime_dependency "activejob", "~> 4"
+  spec.add_runtime_dependency "thor"
 end

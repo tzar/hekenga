@@ -3,9 +3,9 @@ require "rspec/core/rake_task"
 
 RSpec::Core::RakeTask.new(:spec)
 
-desc "Open an irb session preloaded with this library"
+desc "Open a pry session preloaded with this library"
 task :console do
-  sh "irb -rubygems -I lib -r hekenga.rb"
+  sh "bin/console", verbose: false
 end
 
 task :default => :spec
