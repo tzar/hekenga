@@ -36,5 +36,20 @@ module Hekenga
     def reset_registry
       @registry = []
     end
+
+    def any_fatal?
+      Hekenga::Log.where(cancel: true, skip: false).any?
+    end
+
+    def status(migration)
+      logs = Hekenga::Log.where(
+        pkey: migration.to_key
+      ).to_a
+      return :naught if logs.empty?
+      return :skipped if logs.any? {|x| x.skip}
+      return :failed if logs.any? {|x| x.cancel}
+      return :complete if logs.all? {|x| x.done} && logs.length == migration.tasks.length
+      return :running
+    end
   end
 end

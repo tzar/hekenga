@@ -61,6 +61,7 @@ module Hekenga
       end
       # Periodically report on thread progress
       until @migration.log(idx).reload.done
+        @active_thread.join unless @active_thread.alive?
         report_status(task, idx)
         sleep Hekenga.config.report_sleep
       end

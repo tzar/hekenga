@@ -65,6 +65,7 @@ module Hekenga
       case task
       when Hekenga::SimpleTask
         create_log!
+        # TODO - handle errors in task.up!
         task.up!
         log_done!
       when Hekenga::DocumentTask

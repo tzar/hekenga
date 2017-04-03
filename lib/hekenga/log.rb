@@ -15,6 +15,7 @@ module Hekenga
     field :done,   default: false
     field :error,  default: false
     field :cancel, default: false
+    field :skip,   default: false
 
     # Used by document tasks
     field :total

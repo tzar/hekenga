@@ -1,41 +1,126 @@
 #!/usr/bin/env ruby
 
 require "bundler/setup"
-require "hekenga"
-require "thor"
 
 if File.exists?(File.expand_path("config/environment.rb"))
   require File.expand_path("config/environment.rb")
 end
 
+require "hekenga"
+require "thor"
+
 class HekengaCLI < Thor
-  desc "run_all!", "Run all migrations that have not yet run, in date order."
-  def run_all!
-    # TODO
-  end
-  desc "run!", "Run a migration."
-  def run!
-    # TODO
-  end
-  desc "recover", "Attempt to resume a failed migration."
-  def recover
-    # TODO
-  end
-  desc "cancel", "Cancel all active migrations."
-  def cancel
-    # TODO
-  end
   desc "status", "Show which migrations have run and their status."
   def status
-    # TODO
+    Hekenga.load_all!
+    Hekenga.registry.sort_by {|x| x.stamp}.each do |migration|
+      status = case Hekenga.status(migration)
+               when :running
+                 "ACTIVE"
+               when :failed
+                 "FAILED"
+               when :complete
+                 "COMPLT"
+               else
+                 "UN-RUN"
+               end
+      puts "[#{status}] #{migration.to_key}"
+    end
   end
-  desc "rollback", "Rollback a migration."
-  def rollback
-    # TODO
+
+  desc "run_all!", "Run all migrations that have not yet run, in date order."
+  def run_all!
+    bail_if_errors
+    Hekenga.load_all!
+    Hekenga.registry.sort_by {|x| x.stamp}.each do |migration|
+      migration.perform!
+      bail_if_errors
+    end
   end
+
+  desc "run! PATH_OR_PKEY", "Run a migration."
+  def run!(path_or_pkey)
+    bail_if_errors
+    load_migration(path_or_pkey).perform!
+  end
+
+  desc "cancel", "Cancel all active migrations."
+  def cancel
+    Hekenga::Log.where(done: false).set(cancel: true)
+    puts "Sent :cancel to all active hekenga jobs."
+  end
+
   desc "cleanup", "Remove any failure logs."
   def cleanup
-    # TODO
+    Hekenga::Failure.all.delete_all
+    puts "Removed all failure logs."
+  end
+
+  desc "clear! PATH_OR_PKEY", "Clear the logs and failure for a migration. Dangerous!"
+  def clear!(path_or_pkey)
+    migration = load_migration(path_or_pkey)
+    puts "Clearing #{migration.to_key}.."
+    Hekenga::Log.where(pkey: migration.to_key).delete_all
+    Hekenga::Failure.where(pkey: migration.to_key).delete_all
+    puts "Done!"
+  end
+
+  desc "rollback", "Rollback a migration."
+  def rollback
+    todo "rollback"
+  end
+
+  desc "recover", "Attempt to resume a failed migration."
+  def recover
+    todo "recover"
+  end
+
+  desc "errors", "Print the errors associated with a failed migration."
+  def errors
+    todo "errors"
+  end
+
+  desc "skip PATH_OR_PKEY", "Skip a migration so that it won't run."
+  def skip(path_or_pkey)
+    migration = load_migration(path_or_pkey)
+    puts "Skipping #{migration.to_key}.."
+    migration.tasks.each.with_index do |task, idx|
+      log = Hekenga::Log.where(pkey: task.to_key, task_idx: idx).first ||
+        Hekenga::Log.new(migration: migration, task_idx: idx)
+
+      log.done = true
+      log.skip = true
+
+      log.save!
+    end
+    puts "Done!"
+  end
+
+  private
+
+  def todo(op)
+    puts "#{op.capitalize} has not yet been implemented."
+    exit(99)
+  end
+  def bail_if_errors
+    if Hekenga.any_fatal?
+      puts "Refusing to run migrations while there is an existing cancelled migration."
+      exit(1)
+    end
+  end
+  def load_migration(path_or_pkey)
+    if File.exists?(File.expand_path(path_or_pkey))
+      require File.expand_path(path_or_pkey)
+      migration = Hekenga.registry.last
+    else
+      Hekenga.load_all!
+      unless migration = Hekenga.find_migration(path_or_pkey)
+        puts "Can't find migration #{path_or_pkey}. Available migrations:"
+        puts Hekenga.registry.map {|x| "- #{x.to_key}"}
+        exit(2)
+      end
+    end
+    migration
   end
 end
 
