@@ -136,6 +136,7 @@ module Hekenga
           records.push(record)
           if records.length == batch_size
             process_batch(task, records)
+            return if log.cancel
             records = []
           end
         end
@@ -186,23 +187,35 @@ module Hekenga
     end
 
     def persist_batch(task, records, original_records)
+      # NOTE - edgecase where callbacks cause the record to become invalid is
+      # not covered
       records.each do |record|
-        if skip_prepare
-          # NOOP - we skip the prepare_update phase and just use the document
-          # directly
-        elsif task.timeless
-          record.timeless.send(:prepare_update) {}
-        else
-          record.send(:prepare_update) {}
+        begin
+          next if skip_prepare
+          if task.timeless
+            record.timeless.send(:prepare_update) {}
+          else
+            record.send(:prepare_update) {}
+          end
+        rescue => e
+          # If prepare_update throws an error, we're in trouble - crash out now
+          failed_apply!(e, record, records[0].id)
+          return
         end
       end
       begin
-        task.scope.klass.in(_id: records.map(&:_id)).delete_all
-        task.scope.klass.collection.insert_many(records.map(&:as_document))
+        delete_records!(task.scope.klass, records.map(&:_id))
+        write_records!(task.scope.klass, records)
         log_success(task, records)
       rescue => e
         failed_write!(e, original_records)
       end
+    end
+    def delete_records!(klass, ids)
+      klass.in(_id: ids).delete_all
+    end
+    def write_records!(klass, records)
+      klass.collection.insert_many(records.map(&:as_document))
     end
     def failed_apply!(error, record, batch_start_id)
       log.add_failure({
