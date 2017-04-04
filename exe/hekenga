@@ -38,10 +38,22 @@ class HekengaCLI < Thor
     end
   end
 
-  desc "run! PATH_OR_PKEY", "Run a migration."
+  desc "run! PATH_OR_PKEY --test", "Run a migration (optionally in test mode)."
+  option :test, default: false, type: :boolean
   def run!(path_or_pkey)
     bail_if_errors
-    load_migration(path_or_pkey).perform!
+    migration = load_migration(path_or_pkey)
+    migration.test_mode! if options[:test]
+    migration.perform!
+    if options[:test]
+      if Hekenga::Failure.where(pkey: migration.to_key).any?
+        puts "Logs have been preserved for debugging. To reset migration state run:"
+        puts "  hekenga clear! #{path_or_pkey}"
+      else
+        puts "Migration test run completed successfully."
+        clear!(path_or_pkey)
+      end
+    end
   end
 
   desc "cancel", "Cancel all active migrations."

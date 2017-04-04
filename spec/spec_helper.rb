@@ -22,6 +22,11 @@ ActiveJob::Base.queue_adapter = :test
 ActiveJob::Base.logger = nil
 
 RSpec.configure do |config|
+  config.before(:all) do
+    Hekenga::Log.all.delete_all
+    Hekenga::Failure.all.delete_all
+    Example.all.delete_all
+  end
   config.before(:each) do
     DatabaseCleaner.start
     Hekenga.reset_registry

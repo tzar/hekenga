@@ -2,6 +2,10 @@ require 'spec_helper'
 
 describe "Hekenga::DocumentTask (parallel)", type: :job do
   include ActiveJob::TestHelper
+  before do
+    clear_enqueued_jobs
+    clear_performed_jobs
+  end
   before(:each) do
     3.times.each do |idx|
       Example.create! string: "idx-#{idx}", num: idx
@@ -53,6 +57,15 @@ describe "Hekenga::DocumentTask (parallel)", type: :job do
       expect(log.processed).to eq(2)
       expect(log.done).to eq(true)
       expect(log.skipped).to eq(1)
+    end
+    context "test mode" do
+      it "should not persist" do
+        perform_enqueued_jobs do
+          migration.test_mode!
+          migration.perform!
+        end
+        expect(Example.asc(:_id).pluck(:num)).to eq([0, 1, 2])
+      end
     end
   end
 

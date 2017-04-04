@@ -12,9 +12,9 @@ module Hekenga
       raise Hekenga::Invalid.new(self, :ups, "missing") unless ups.any?
     end
 
-    def up!
+    def up!(context)
       @ups.each do |block|
-        block.call
+        context.instance_exec(&block)
       end
     end
 

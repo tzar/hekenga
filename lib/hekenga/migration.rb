@@ -56,6 +56,9 @@ module Hekenga
     def performed?
       !!log(self.tasks.length - 1).done
     end
+    def test_mode!
+      @test_mode = true
+    end
     def perform!
       Hekenga::MasterProcess.new(self).run!
     end
@@ -64,14 +67,7 @@ module Hekenga
       @active_idx = task_idx
       case task
       when Hekenga::SimpleTask
-        create_log!
-        begin
-          task.up!
-        rescue => e
-          simple_failure!(e)
-          return
-        end
-        log_done!
+        start_simple_task(task)
       when Hekenga::DocumentTask
         # TODO - online migration support (have log.total update, requeue)
         create_log!(total: task.scope.count)
@@ -79,7 +75,6 @@ module Hekenga
           start_parallel_task(task, task_idx)
         else
           start_document_task(task, task_idx)
-          log_done!
         end
       end
     end
@@ -91,6 +86,19 @@ module Hekenga
     end
 
     # Internal perform methods
+    def start_simple_task(task)
+      create_log!
+      begin
+        with_setup do
+          task.up!(@context)
+        end
+      rescue => e
+        simple_failure!(e)
+        return
+      end
+      log_done!
+    end
+
     def check_for_completion
       if log.processed == log.total
         log_done!
@@ -103,7 +111,7 @@ module Hekenga
       # TODO - support for crazy numbers of documents where pluck is too big
       task.scope.asc(:_id).pluck(:_id).take(log.total).each_slice(batch_size).each do |ids|
         Hekenga::ParallelJob.perform_later(
-          self.to_key, task_idx, ids.map(&:to_s)
+          self.to_key, task_idx, ids.map(&:to_s), !!@test_mode
         )
       end
     end
@@ -115,21 +123,21 @@ module Hekenga
         process_batch(task, task.scope.asc(:_id).in(_id: ids).to_a)
       end
     end
-    def with_setup(task)
-      @context = Hekenga::Context.new
-      task.setups.each do |block|
+    def with_setup(task = nil)
+      @context = Hekenga::Context.new(@test_mode)
+      task&.setups&.each do |block|
         @context.instance_exec(&block)
       end
       # Disable specific callbacks
       begin
-        task.disable_rules.each do |rule|
+        task&.disable_rules&.each do |rule|
           rule[:klass].skip_callback rule[:callback]
         end
         yield
       ensure
         @context = nil
         # Make sure the callbacks make it back
-        task.disable_rules.each do |rule|
+        task&.disable_rules&.each do |rule|
           rule[:klass].set_callback rule[:callback]
         end
       end
@@ -147,6 +155,7 @@ module Hekenga
         end
         process_batch(task, records) if records.any?
       end
+      log_done!
     end
     def run_filters(task, record)
       task.filters.all? do |block|
@@ -192,6 +201,10 @@ module Hekenga
     end
 
     def persist_batch(task, records, original_records)
+      if @test_mode
+        log_success(task, records)
+        return
+      end
       # NOTE - edgecase where callbacks cause the record to become invalid is
       # not covered
       records.each do |record|

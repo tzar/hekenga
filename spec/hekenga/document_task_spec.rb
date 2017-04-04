@@ -42,5 +42,12 @@ describe Hekenga::DocumentTask do
       expect(log.done).to eq(true)
       expect(log.skipped).to eq(1)
     end
+    context "test mode" do
+      it "should not persist" do
+        migration.test_mode!
+        migration.perform!
+        expect(Example.asc(:_id).pluck(:num)).to eq([0, 1, 2])
+      end
+    end
   end
 end

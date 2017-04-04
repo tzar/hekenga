@@ -14,12 +14,12 @@ describe Hekenga::SimpleTask do
 
         task "Demo up" do
           up do
-            Example.all.set num: 42
+            Example.all.set num: 42 if actual?
           end
         end
         task "Chained up" do
           up do
-            Example.all.inc(num: 1)
+            Example.all.inc(num: 1) unless test?
           end
         end
       end
@@ -28,6 +28,15 @@ describe Hekenga::SimpleTask do
     it "should carry out the migration" do
       migration.perform!
       expect(Example.pluck(:num)).to eq([43, 43, 43])
+    end
+    
+    context "test mode" do
+      before { migration.test_mode! }
+
+      it "should not run due to internal conditionals" do
+        migration.perform!
+        expect(Example.pluck(:num)).to eq([0, 1, 2])
+      end
     end
   end
 end
