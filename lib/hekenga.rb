@@ -51,5 +51,8 @@ module Hekenga
       return :complete if logs.all? {|x| x.done} && logs.length == migration.tasks.length
       return :running
     end
+    def log(str)
+      print str.to_s+"\n"
+    end
   end
 end

@@ -5,12 +5,12 @@ module Hekenga
     end
 
     def run!
-      puts "Launching migration #{@migration.to_key}"
+      Hekenga.log "Launching migration #{@migration.to_key}"
       @migration.tasks.each.with_index do |task, idx|
         launch_task(task, idx)
         report_while_active(task, idx)
         if @migration.log(idx).cancel
-          print "TERMINATING DUE TO CRITICAL ERRORS\n"
+          Hekenga.log "TERMINATING DUE TO CRITICAL ERRORS"
           report_errors(idx)
           return
         elsif any_validation_errors?(idx)
@@ -19,6 +19,29 @@ module Hekenga
         end
         cleanup
       end
+    end
+
+    def retry!(task_idx, scope)
+      task = @migration.tasks[task_idx]
+      raise "Invalid task to retry" unless task.is_a?(Hekenga::DocumentTask)
+      # Reset logs completely
+      Hekenga::Log.where(pkey: @migration.to_key, task_idx: task_idx).delete_all
+      Hekenga::Failure.where(pkey: @migration.to_key, task_idx: task_idx).delete_all
+      @migration.reload_logs
+      # Start the task based on the passed scope - similar to run! but we exit
+      # directly on failure.
+      launch_task(task, task_idx, scope)
+      report_while_active(task, task_idx)
+      if @migration.log(idx).cancel
+        return false
+      elsif any_validation_errors?(idx)
+        handle_validation_errors(task, idx)
+        if @migration.log(idx).cancel
+          return false
+        end
+      end
+      cleanup
+      true
     end
 
     def any_validation_errors?(idx)
@@ -35,7 +58,7 @@ module Hekenga
           return
         end
       when :stop
-        print "TERMINATING DUE TO VALIDATION ERRORS\n"
+        Hekenga.log "TERMINATING DUE TO VALIDATION ERRORS"
         @migration.log(idx).set(cancel: true)
         return
       end
@@ -48,34 +71,34 @@ module Hekenga
       valid_errs     = scope.where(_type: "Hekenga::Failure::Validation")
       valid_errs_ctr = valid_errs.count
       unless valid_errs_ctr.zero?
-        print "#{valid_errs_ctr} records failed validation. To get a list:\n"
-        print "Hekenga::Failure::Validation.lookup('#{log_id}', #{idx})\n"
+        Hekenga.log "#{valid_errs_ctr} records failed validation. To get a list:"
+        Hekenga.log "Hekenga::Failure::Validation.lookup('#{log_id}', #{idx})"
       end
       # Write failures
       write_errs     = scope.where(_type: "Hekenga::Failure::Write")
       write_errs_ctr = write_errs.count
       unless write_errs_ctr.zero?
-        print "#{write_errs_ctr} write errors detected. Error messages:\n"
-        print(write_errs.pluck(:message).uniq.map {|x| "- #{x}"}.join("\n")+"\n")
-        print "To get a list:\n"
-        print "Hekenga::Failure::Write.lookup('#{log_id}', #{idx})\n"
+        Hekenga.log "#{write_errs_ctr} write errors detected. Error messages:"
+        Hekenga.log(write_errs.pluck(:message).uniq.map {|x| "- #{x}"}.join("\n"))
+        Hekenga.log "To get a list:"
+        Hekenga.log "Hekenga::Failure::Write.lookup('#{log_id}', #{idx})"
         # TODO - recover message
       end
       # Migration errors
       general_errs     = scope.where(_type: "Hekenga::Failure::Error")
       general_errs_ctr = general_errs.count
       unless general_errs_ctr.zero?
-        print "#{general_errs_ctr} migration errors detected. Error messages:\n"
-        print(general_errs.pluck(:message).uniq.map {|x| "- #{x}"}.join("\n")+"\n")
-        print "To get a list:\n"
-        print "Hekenga::Failure::Error.lookup('#{log_id}', #{idx})\n"
+        Hekenga.log "#{general_errs_ctr} migration errors detected. Error messages:"
+        Hekenga.log(general_errs.pluck(:message).uniq.map {|x| "- #{x}"}.join("\n"))
+        Hekenga.log "To get a list:"
+        Hekenga.log "Hekenga::Failure::Error.lookup('#{log_id}', #{idx})"
         # TODO - recover message
       end
     end
-    def launch_task(task, idx)
-      puts "Launching task##{idx}: #{task.description}"
+    def launch_task(task, idx, scope = nil)
+      Hekenga.log "Launching task##{idx}: #{task.description}"
       @active_thread = Thread.new do
-        @migration.perform_task!(idx)
+        @migration.perform_task!(idx, scope)
       end.tap {|t| t.abort_on_exception = true }
     end
     def report_while_active(task, idx)
@@ -93,7 +116,7 @@ module Hekenga
       report_status(task, idx)
       return if @migration.log(idx).cancel
       report_errors(idx)
-      print "Completed\n"
+      Hekenga.log "Completed"
     end
     def report_status(task, idx)
       # Simple tasks
@@ -103,9 +126,9 @@ module Hekenga
         skipped_ctr    = @migration.log(idx).skipped
         valid_errs     = scope.where(_type: "Hekenga::Failure::Validation")
         valid_errs_ctr = valid_errs.count
-        print "Processed #{@migration.log(idx).processed} of #{@migration.log(idx).total} (#{valid_errs_ctr} invalid, #{skipped_ctr} skipped)\n"
+        Hekenga.log "Processed #{@migration.log(idx).processed} of #{@migration.log(idx).total} (#{valid_errs_ctr} invalid, #{skipped_ctr} skipped)"
       when Hekenga::SimpleTask
-        print "Waiting on task\n"
+        Hekenga.log "Waiting on task"
       end
     end
     def cleanup
@@ -114,7 +137,7 @@ module Hekenga
 
     def continue_prompt?(str)
       loop do
-        print "#{str} Continue? (Y/N)"
+        print "#{str} Continue? (Y/N)\n"
         case gets.chomp.downcase
         when "y"
           return true
