@@ -63,8 +63,9 @@ module Hekenga
       Hekenga::MasterProcess.new(self).run!
     end
     def perform_task!(task_idx = 0)
-      task = @tasks[task_idx] or return
-      @active_idx = task_idx
+      task         = @tasks[task_idx] or return
+      @active_task = task
+      @active_idx  = task_idx
       case task
       when Hekenga::SimpleTask
         start_simple_task(task)
@@ -182,6 +183,8 @@ module Hekenga
         if validate_record(record)
           to_persist.push(record)
           fallbacks.push(original_record)
+        else
+          return if log.cancel
         end
       end.compact
       persist_batch(task, to_persist, fallbacks)
@@ -272,7 +275,11 @@ module Hekenga
       }, Hekenga::Failure::Validation)
       log.set(error: true)
       log.incr_and_return(processed: 1, unvalid: 1)
-      check_for_completion
+      if @active_task.invalid_strategy == :cancel
+        log_cancel!
+      else
+        check_for_completion
+      end
     end
     def validate_record(record)
       # TODO - ability to skip validation

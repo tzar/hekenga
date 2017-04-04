@@ -40,4 +40,57 @@ describe "Tasks with invalid result" do
       expect(failure.errs).to eq(["Num Can't be 100"])
     end
   end
+  describe "invalid strategies" do
+    let(:migration) do
+      Hekenga.migration do
+        description "Broken"
+        created "2017-04-04 12:00"
+        batch_size 1
+        per_document "break" do
+          scope Example.all
+          up do |doc|
+            doc.num = 100 if doc.num == 2
+          end
+        end
+        task "chain" do
+          up {}
+        end
+      end
+    end
+    it "has a default strategy of :prompt" do
+      expect(migration.tasks[0].invalid_strategy).to eq(:prompt)
+    end
+    describe ":prompt" do
+      before { migration.tasks[0].invalid_strategy = :prompt }
+      it "runs the migration completely, then asks the user whether to continue" do
+        expect_any_instance_of(Hekenga::MasterProcess).to receive(:continue_prompt?).and_return(false)
+        expect { migration.perform! }.to_not raise_error
+        log = migration.log(0)
+        expect(log.cancel).to eq(true)
+      end
+    end
+    describe ":cancel" do
+      before { migration.tasks[0].invalid_strategy = :cancel }
+      it "signals cancellation on encountering the first validation error" do
+        expect(migration).to receive(:log_cancel!)
+        expect { migration.perform! }.to_not raise_error
+      end
+    end
+    describe ":continue" do
+      before { migration.tasks[0].invalid_strategy = :continue }
+      it "ignores validation errors" do
+        expect { migration.perform! }.to_not raise_error
+        log = migration.log(1)
+        expect(log.done).to eq(true)
+      end
+    end
+    describe ":stop" do
+      before { migration.tasks[0].invalid_strategy = :stop }
+      it "completes the task, then stops" do
+        expect { migration.perform! }.to_not raise_error
+        log = migration.log(0)
+        expect(log.cancel).to eq(true)
+      end
+    end
+  end
 end

@@ -4,6 +4,15 @@ module Hekenga
     class DocumentTask < Hekenga::DSL
       configures Hekenga::DocumentTask
 
+      INVALID_BEHAVIOR_STRATEGIES = [:prompt, :cancel, :stop, :continue]
+
+      def when_invalid(val)
+        unless INVALID_BEHAVIOR_STRATEGIES.include?(val)
+          raise "Invalid value #{val}. Valid values for invalid_behavior are: #{INVALID_BEHAVIOR_STRATEGIES.join(", ")}."
+        end
+        @object.invalid_strategy = val
+      end
+
       def scope(scope)
         @object.scope = scope
       end
