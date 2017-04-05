@@ -23,7 +23,6 @@ module Hekenga
 
     def retry!(task_idx, scope)
       task = @migration.tasks[task_idx]
-      raise "Invalid task to retry" unless task.is_a?(Hekenga::DocumentTask)
       # Reset logs completely
       Hekenga::Log.where(pkey: @migration.to_key, task_idx: task_idx).delete_all
       Hekenga::Failure.where(pkey: @migration.to_key, task_idx: task_idx).delete_all
@@ -32,11 +31,11 @@ module Hekenga
       # directly on failure.
       launch_task(task, task_idx, scope)
       report_while_active(task, task_idx)
-      if @migration.log(idx).cancel
+      if @migration.log(task_idx).cancel
         return false
-      elsif any_validation_errors?(idx)
-        handle_validation_errors(task, idx)
-        if @migration.log(idx).cancel
+      elsif any_validation_errors?(task_idx)
+        handle_validation_errors(task, task_idx)
+        if @migration.log(task_idx).cancel
           return false
         end
       end

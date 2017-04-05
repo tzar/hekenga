@@ -60,6 +60,7 @@ module Hekenga
       @test_mode = true
     end
     def perform!
+      # TODO - raise if status wrong
       Hekenga::MasterProcess.new(self).run!
     end
     def perform_task!(task_idx = 0, scope = nil)
@@ -84,59 +85,102 @@ module Hekenga
       # NOTE - can't find a way to check this automatically with ActiveJob right now
       return unless prompt "Check that the migration queue has processed before recovering. Continue?"
       # Write failures
+      found_failure = false
       @tasks.each.with_index do |task, idx|
-        next unless task.is_a?(Hekenga::DocumentTask)
-
-        validation_failures = Hekenga::Failure::Validation.where(pkey: to_key, task_idx: idx)
-        write_failures      = Hekenga::Failure::Write.where(pkey: to_key, task_idx: idx)
-        error_failures      = Hekenga::Failure::Error.where(pkey: to_key, task_idx: idx)
-        cancelled_failures  = Hekenga::Failure::Cancelled.where(pkey: to_key, task_idx: idx)
-
-        # Stats
-        validation_failure_ctr = validation_failures.count
-        write_failure_ctr      = write_failures.count
-        error_failure_ctr      = error_failures.count
-        cancelled_failure_ctr  = cancelled_failures.count
-        next if [
-          validation_failure_ctr,
-          write_failure_ctr,
-          error_failure_ctr,
-          cancelled_failure_ctr
-        ].all? {|x| x.zero?}
-
-        # Prompt for recovery
-        recoverP = prompt(
-          "Found #{validation_failure_ctr} invalid, "+
-          "#{write_failure_ctr} failed writes, "+
-          "#{error_failure_ctr} errors, "+
-          "#{cancelled_failure_ctr} cancelled on migration. Recover?"
-        )
-        next unless recoverP
-
-        # Recover from critical write failures (DB records potentially lost)
-        unless write_failure_ctr.zero?
-          Hekenga.log "Recovering old data from #{failure_count} write failure(s)\n"
-          recover_data(write_failures, task.scope.klass)
+        # If no log, run the task now
+        if !log(idx)
+          return false unless retry_task!(task, idx)
+          next
+        end
+        # Did this task fail?
+        failedP = log(idx).cancel || Hekenga::Failure.where(pkey: to_key, task_idx: idx).any?
+        # If it didn't, and we haven't found a failure, keep searching
+        unless failedP || found_failure
+          next
+        end
+        # If it did fail, and we have found a failure, prompt user
+        if found_failure
+          next unless prompt("Retry task##{idx}?")
+        end
+        found_failure ||= failedP
+        # This is the first failure we've detected - recover from it
+        case task
+        when Hekenga::DocumentTask
+          ret = recover_document_task!(task, idx)
+        when Hekenga::SimpleTask
+          ret = recover_simple!(task, idx)
         end
 
-        # Resume task from point of error
-        if task.parallel
-          # TODO - support for recovery on huge # IDs
-          failed_ids = [
-            write_failures.pluck(:document_ids),
-            error_failures.pluck(:batch_start),
-            cancelled_failures.pluck(:document_ids)
-          ].flatten.compact
-          resume_scope = task.scope.klass.in(_id: failed_ids)
+        case ret
+        when :next
+          next
+        when :cancel
+          return false
         else
-          first_id = error_failures.first&.batch_start || write_failures.first&.batch_start
-          resume_scope = task.scope.klass.gte(_id: first_id)
-        end
-        unless Hekenga::MasterProcess.new(self).retry!(idx, resume_scope)
-          Hekenga.log "Failed to retry the task. Aborting.."
-          return
+          return false unless retry_task!(task, idx, ret)
         end
       end
+      return true
+    end
+
+    def retry_task!(task, idx, scope = nil)
+      Hekenga.log "Retrying task##{idx}"
+      unless Hekenga::MasterProcess.new(self).retry!(idx, scope)
+        Hekenga.log "Failed to retry the task. Aborting.."
+        return false
+      end
+      return true
+    end
+
+    def recover_simple!(task, idx)
+      # Simple tasks just get retried - no fuss
+      Hekenga.log("Found failed simple task. Retrying..")
+      return
+    end
+
+    def recover_document_task!(task, idx)
+      # Document tasks are a bit more involved.
+      validation_failures = Hekenga::Failure::Validation.where(pkey: to_key, task_idx: idx)
+      write_failures      = Hekenga::Failure::Write.where(pkey: to_key, task_idx: idx)
+      error_failures      = Hekenga::Failure::Error.where(pkey: to_key, task_idx: idx)
+      cancelled_failures  = Hekenga::Failure::Cancelled.where(pkey: to_key, task_idx: idx)
+
+      # Stats
+      validation_failure_ctr = validation_failures.count
+      write_failure_ctr      = write_failures.count
+      error_failure_ctr      = error_failures.count
+      cancelled_failure_ctr  = cancelled_failures.count
+
+      # Prompt for recovery
+      recoverP = prompt(
+        "Found #{validation_failure_ctr} invalid, "+
+        "#{write_failure_ctr} failed writes, "+
+        "#{error_failure_ctr} errors, "+
+        "#{cancelled_failure_ctr} cancelled on migration. Recover?"
+      )
+      return :next unless recoverP
+
+      # Recover from critical write failures (DB records potentially lost)
+      unless write_failure_ctr.zero?
+        Hekenga.log "Recovering old data from #{write_failure_ctr} write failure(s)\n"
+        recover_data(write_failures, task.scope.klass)
+      end
+
+      # Resume task from point of error
+      if task.parallel
+        # TODO - support for recovery on huge # IDs
+        failed_ids = [
+          write_failures.pluck(:document_ids),
+          error_failures.pluck(:batch_start),
+          cancelled_failures.pluck(:document_ids)
+        ].flatten.compact
+        resume_scope = task.scope.klass.in(_id: failed_ids)
+      else
+        first_id = error_failures.first&.batch_start || write_failures.first&.batch_start
+        resume_scope = task.scope.klass.gte(_id: first_id)
+      end
+
+      return resume_scope
     end
 
     def recover_data(write_failures, klass)
@@ -198,7 +242,10 @@ module Hekenga
       end
     end
     def run_parallel_task(task_idx, ids)
-      return if log(task_idx).cancel
+      if log(task_idx).cancel
+        failed_cancelled!(ids)
+        return
+      end
       task = self.tasks[task_idx] or return
       @active_idx = task_idx
       with_setup(task) do

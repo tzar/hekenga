@@ -20,3 +20,4 @@ end
 require 'hekenga/failure/error'
 require 'hekenga/failure/write'
 require 'hekenga/failure/validation'
+require 'hekenga/failure/cancelled'
