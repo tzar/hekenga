@@ -154,7 +154,88 @@ describe "Hekenga#recover!" do
       expect(Example.pluck(:num).sort).to eq([10, 11, 12])
     end
   end
-  describe "chained migrations" do
-    # TODO
+  describe "chained simple migrations" do
+    let(:migration) do
+      Hekenga.migration do
+        description "errored migration"
+        created "2017-03-31 17:00"
+        batch_size 3
+
+        task "stage1" do
+          up do
+            raise "fail" if Example.where(num: 0).any?
+            Example.all.inc(num: 1)
+          end
+        end
+        task "stage2" do
+          up do
+            raise "fail" if Example.where(num: 2).any?
+            Example.all.inc(num: 1)
+          end
+        end
+      end
+    end
+    before do
+      allow(migration).to receive(:prompt).and_return(true)
+      migration.perform!
+    end
+    it "should perform stage 2 when recovering from stage 1" do
+      Example.where(num: 0).update_all(num: 3)
+      expect(migration.recover!).to eq(false)
+      expect(Example.pluck(:num).sort).to eq([2, 3, 4])
+    end
+    it "should allow double recovery" do
+      Example.where(num: 0).update_all(num: 3)
+      expect(migration.recover!).to eq(false)
+      Example.where(num: 2).update_all(num: 5)
+      expect(migration.recover!).to eq(true)
+      expect(Example.pluck(:num).sort).to eq([4, 5, 6])
+    end
+  end
+  describe "validation error in early stage" do
+    let(:migration) do
+      Hekenga.migration do
+        description "invalid migration"
+        created "2017-03-31 17:00"
+        batch_size 3
+
+        per_document "stage1" do
+          scope Example.all
+          when_invalid :continue
+          up do |doc|
+            if doc.num.zero?
+              doc.num = 100
+            else
+              doc.num += 1
+            end
+          end
+        end
+        per_document "stage2" do
+          scope Example.all
+          when_invalid :continue
+          up do |doc|
+            if doc.string == "blah"
+              doc.string = "uhoh"
+            else
+              doc.string = "blah"
+            end
+          end
+        end
+      end
+    end
+    before do
+      allow(migration).to receive(:prompt).and_return(false)
+      migration.perform!
+    end
+    it "should perform both stages" do
+      expect(Example.pluck(:string)).to eq(["blah"]*3)
+      expect(Example.pluck(:num).sort).to eq([0,2,3])
+    end
+    it "should re-run stage1 but not stage2" do
+      Example.where(num: 0).update_all(num: 3)
+      expect(migration.recover!).to eq(true)
+      expect(Example.pluck(:num).sort).to eq([2,3,4])
+      expect(Example.pluck(:string)).to eq(["blah"]*3)
+    end
   end
 end

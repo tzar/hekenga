@@ -21,6 +21,7 @@ describe "Tasks with invalid result" do
         end
       end
     end
+    before { allow(migration).to receive(:prompt).and_return(true) }
 
     it "should log correctly without crashing" do
       expect { migration.perform!  }.to_not raise_error
@@ -57,6 +58,7 @@ describe "Tasks with invalid result" do
         end
       end
     end
+    before { allow(migration).to receive(:prompt).and_return(true) }
     it "has a default strategy of :prompt" do
       expect(migration.tasks[0].invalid_strategy).to eq(:prompt)
     end

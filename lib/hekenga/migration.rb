@@ -83,26 +83,18 @@ module Hekenga
     end
     def recover!
       # NOTE - can't find a way to check this automatically with ActiveJob right now
-      return unless prompt "Check that the migration queue has processed before recovering. Continue?"
+      return false unless prompt "Check that the migration queue has processed before recovering. Continue?"
       # Write failures
-      found_failure = false
       @tasks.each.with_index do |task, idx|
         # If no log, run the task now
-        if !log(idx)
+        unless Hekenga::Log.where(pkey: self.to_key, task_idx: idx).any?
           return false unless retry_task!(task, idx)
           next
         end
         # Did this task fail?
         failedP = log(idx).cancel || Hekenga::Failure.where(pkey: to_key, task_idx: idx).any?
-        # If it didn't, and we haven't found a failure, keep searching
-        unless failedP || found_failure
-          next
-        end
-        # If it did fail, and we have found a failure, prompt user
-        if found_failure
-          next unless prompt("Retry task##{idx}?")
-        end
-        found_failure ||= failedP
+        # If it didn't, keep searching
+        next unless failedP
         # This is the first failure we've detected - recover from it
         case task
         when Hekenga::DocumentTask
