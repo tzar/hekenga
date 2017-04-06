@@ -196,7 +196,7 @@ describe "Hekenga#recover!" do
     let(:migration) do
       Hekenga.migration do
         description "invalid migration"
-        created "2017-03-31 17:00"
+        created "2017-04-05 17:00"
         batch_size 3
 
         per_document "stage1" do
@@ -204,8 +204,10 @@ describe "Hekenga#recover!" do
           when_invalid :continue
           up do |doc|
             if doc.num.zero?
+              puts "Setting doc.num(#{doc.num}) to #{doc.num + 1}"
               doc.num = 100
             else
+              puts "Setting doc.num(#{doc.num}) to #{doc.num + 1}"
               doc.num += 1
             end
           end
@@ -224,7 +226,7 @@ describe "Hekenga#recover!" do
       end
     end
     before do
-      allow(migration).to receive(:prompt).and_return(false)
+      allow(migration).to receive(:prompt).and_return(true)
       migration.perform!
     end
     it "should perform both stages" do

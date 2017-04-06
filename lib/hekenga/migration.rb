@@ -72,7 +72,7 @@ module Hekenga
         start_simple_task(task)
       when Hekenga::DocumentTask
         # TODO - online migration support (have log.total update, requeue)
-        scope ||= task.scope
+        scope ||= task.scope.asc(:_id)
         create_log!(total: scope.count)
         if task.parallel
           start_parallel_task(task, task_idx, scope)
@@ -154,7 +154,7 @@ module Hekenga
 
       # Recover from critical write failures (DB records potentially lost)
       unless write_failure_ctr.zero?
-        Hekenga.log "Recovering old data from #{write_failure_ctr} write failure(s)\n"
+        Hekenga.log "Recovering old data from #{write_failure_ctr} write failure(s)"
         recover_data(write_failures, task.scope.klass)
       end
 
@@ -164,12 +164,28 @@ module Hekenga
         failed_ids = [
           write_failures.pluck(:document_ids),
           error_failures.pluck(:batch_start),
-          cancelled_failures.pluck(:document_ids)
+          cancelled_failures.pluck(:document_ids),
+          validation_failures.pluck(:doc_id)
         ].flatten.compact
-        resume_scope = task.scope.klass.in(_id: failed_ids)
+        resume_scope = task.scope.klass.asc(:_id).in(_id: failed_ids)
       else
-        first_id = error_failures.first&.batch_start || write_failures.first&.batch_start
-        resume_scope = task.scope.klass.gte(_id: first_id)
+        first_id     = error_failures.first&.batch_start || write_failures.first&.batch_start
+        invalid_ids  = validation_failures.pluck(:doc_id)
+        if first_id && invalid_ids.any?
+          resume_scope = task.scope.klass.asc(:_id).and(
+            task.scope.selector,
+            task.scope.klass.or(
+              {_id: {:$gte => first_id}},
+              {_id: {:$in  => invalid_ids}}
+            ).selector
+          )
+        elsif first_id
+          resume_scope = task.scope.asc(:_id).gte(_id: first_id)
+        elsif invalid_ids.any?
+          resume_scope = task.scope.klass.asc(:_id).in(_id: invalid_ids)
+        else
+          resume_scope = :next
+        end
       end
 
       return resume_scope
