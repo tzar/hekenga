@@ -60,8 +60,12 @@ module Hekenga
       @test_mode = true
     end
     def perform!
-      # TODO - raise if status wrong
-      Hekenga::MasterProcess.new(self).run!
+      if Hekenga.status(self) == :naught
+        Hekenga::MasterProcess.new(self).run!
+      else
+        Hekenga.log "This migration has already been run! Aborting."
+        return false
+      end
     end
     def perform_task!(task_idx = 0, scope = nil)
       task         = @tasks[task_idx] or return
