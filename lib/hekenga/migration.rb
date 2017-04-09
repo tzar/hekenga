@@ -69,7 +69,6 @@ module Hekenga
     end
     def perform_task!(task_idx = 0, scope = nil)
       task         = @tasks[task_idx] or return
-      @active_task = task
       @active_idx  = task_idx
       case task
       when Hekenga::SimpleTask
@@ -306,6 +305,9 @@ module Hekenga
         @context.instance_exec(record, &block)
       end
     end
+    def deep_clone(record)
+      record.as_document.deep_dup
+    end
     def process_batch(task, records)
       @skipped   = []
       to_persist = []
@@ -317,7 +319,7 @@ module Hekenga
       log_skipped(task, filtered[false]) if filtered[false]
       return unless filtered[true]
       filtered[true].map.with_index do |record, idx|
-        original_record = Marshal.load(Marshal.dump(record.as_document))
+        original_record = deep_clone(record)
         begin
           task.up!(@context, record)
         rescue => e
@@ -325,7 +327,7 @@ module Hekenga
           @skipped = filtered[true][idx+1..-1]
           return
         end
-        if validate_record(record)
+        if validate_record(task, record)
           to_persist.push(record)
           fallbacks.push(original_record)
         else
@@ -422,7 +424,7 @@ module Hekenga
       }, Hekenga::Failure::Write)
       log_cancel!
     end
-    def failed_validation!(record)
+    def failed_validation!(task, record)
       log.add_failure({
         doc_id:   record.id,
         errs:     record.errors.full_messages,
@@ -430,18 +432,18 @@ module Hekenga
       }, Hekenga::Failure::Validation)
       log.set(error: true)
       log.incr_and_return(processed: 1, unvalid: 1)
-      if @active_task.invalid_strategy == :cancel
+      if task.invalid_strategy == :cancel
         log_cancel!
       else
         check_for_completion
       end
     end
-    def validate_record(record)
+    def validate_record(task, record)
       # TODO - ability to skip validation
       if record.valid?
         true
       else
-        failed_validation!(record)
+        failed_validation!(task, record)
         false
       end
     end
