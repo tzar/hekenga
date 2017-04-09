@@ -11,9 +11,6 @@ module Hekenga
         end
         @object.batch_size = size
       end
-      def skip_prepare!
-        @object.skip_prepare = true
-      end
       def created(stamp = nil)
         @object.stamp = Time.parse(stamp)
       end

@@ -22,6 +22,9 @@ module Hekenga
       def timeless!
         @object.timeless = true
       end
+      def skip_prepare!
+        @object.skip_prepare = true
+      end
       def disable_callback(callback, args = {})
         [args[:on]].flatten.compact.each do |model|
           @object.disable_rules.push({

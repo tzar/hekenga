@@ -3,7 +3,7 @@ module Hekenga
   class DocumentTask
     attr_reader :ups, :downs, :setups, :filters
     attr_accessor :parallel, :disable_rules, :scope, :timeless
-    attr_accessor :description, :invalid_strategy
+    attr_accessor :description, :invalid_strategy, :skip_prepare
     def initialize
       @ups              = []
       @downs            = []
@@ -11,6 +11,7 @@ module Hekenga
       @setups           = []
       @filters          = []
       @invalid_strategy = :prompt
+      @skip_prepare     = false
     end
 
     def validate!

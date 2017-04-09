@@ -26,6 +26,7 @@ module Hekenga
       end
     end
     def find_migration(key)
+      load_all!
       registry.detect do |migration|
         migration.to_key == key
       end

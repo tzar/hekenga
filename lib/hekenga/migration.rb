@@ -5,7 +5,7 @@ require 'hekenga/master_process'
 require 'hekenga/log'
 module Hekenga
   class Migration
-    attr_accessor :stamp, :description, :skip_prepare, :batch_size
+    attr_accessor :stamp, :description, :batch_size
     attr_reader :tasks
 
     def initialize
@@ -360,7 +360,7 @@ module Hekenga
       # not covered
       records.each do |record|
         begin
-          next if skip_prepare
+          next if task.skip_prepare
           if task.timeless
             record.timeless.send(:prepare_update) {}
           else
