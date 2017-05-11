@@ -25,14 +25,6 @@ module Hekenga
       def skip_prepare!
         @object.skip_prepare = true
       end
-      def disable_callback(callback, args = {})
-        [args[:on]].flatten.compact.each do |model|
-          @object.disable_rules.push({
-            klass:    model,
-            callback: callback
-          })
-        end
-      end
       def setup(&block)
         @object.setups.push block
       end

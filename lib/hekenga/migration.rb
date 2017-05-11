@@ -271,18 +271,10 @@ module Hekenga
       task&.setups&.each do |block|
         @context.instance_exec(&block)
       end
-      # Disable specific callbacks
       begin
-        task&.disable_rules&.each do |rule|
-          rule[:klass].skip_callback rule[:callback]
-        end
         yield
       ensure
         @context = nil
-        # Make sure the callbacks make it back
-        task&.disable_rules&.each do |rule|
-          rule[:klass].set_callback rule[:callback]
-        end
       end
     end
     def start_document_task(task, task_idx, scope)
@@ -440,6 +432,7 @@ module Hekenga
     end
     def validate_record(task, record)
       # TODO - ability to skip validation
+      # TODO - handle errors on validation
       if record.valid?
         true
       else

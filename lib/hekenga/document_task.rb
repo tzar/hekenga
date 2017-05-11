@@ -2,12 +2,11 @@ require 'hekenga/irreversible'
 module Hekenga
   class DocumentTask
     attr_reader :ups, :downs, :setups, :filters
-    attr_accessor :parallel, :disable_rules, :scope, :timeless
+    attr_accessor :parallel, :scope, :timeless
     attr_accessor :description, :invalid_strategy, :skip_prepare
     def initialize
       @ups              = []
       @downs            = []
-      @disable_rules    = []
       @setups           = []
       @filters          = []
       @invalid_strategy = :prompt

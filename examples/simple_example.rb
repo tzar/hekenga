@@ -24,9 +24,6 @@ Hekenga.migration do
   # - scope
   # - arbitrary block
   # Jobs can be run in parallel via ActiveJob.
-  # Callbacks can be disabled for the context of the job either globally via
-  # disable_callbacks or specifically via disable_callback, with multiple models
-  # optionally targetted via the `on` param.
   # A setup block is also provided (this must be able to be run multiple times!)
   # per_document migrations should be resumable/retryable..
   # errors should never result in data loss, and should be logged to a migration
