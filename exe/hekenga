@@ -33,8 +33,10 @@ class HekengaCLI < Thor
     bail_if_errors
     Hekenga.load_all!
     Hekenga.registry.sort_by {|x| x.stamp}.each do |migration|
-      migration.perform!
-      bail_if_errors
+      if Hekenga.status(migration) == :naught
+        migration.perform!
+        bail_if_errors
+      end
     end
   end
 
