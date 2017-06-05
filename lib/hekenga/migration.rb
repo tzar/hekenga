@@ -398,7 +398,7 @@ module Hekenga
       log.add_failure({
         message:     error.to_s,
         backtrace:   error.backtrace,
-        document:    Marshal.load(Marshal.dump(record.as_document)),
+        document:    deep_clone(record),
         batch_start: batch_start_id
       }, Hekenga::Failure::Error)
       log_cancel!
@@ -420,7 +420,7 @@ module Hekenga
       log.add_failure({
         doc_id:   record.id,
         errs:     record.errors.full_messages,
-        document: Marshal.load(Marshal.dump(record.as_document))
+        document: deep_clone(record),
       }, Hekenga::Failure::Validation)
       log.set(error: true)
       log.incr_and_return(processed: 1, unvalid: 1)

@@ -40,6 +40,24 @@ describe "Tasks with invalid result" do
       expect(failure.doc_id).to eq(doc.id)
       expect(failure.errs).to eq(["Num Can't be 100"])
     end
+    it "should not crash with unmarshal-able time" do
+      Example.all.set date: Time.new(24)
+      expect { migration.perform!  }.to_not raise_error
+      log = migration.log(0)
+
+      expect(log.error).to eq(true)
+      expect(log.cancel).to eq(false)
+      expect(log.failures.count).to eq(1)
+
+      failure = log.failures.last
+      doc     = Example.find_by(num: 2)
+      expect(failure.class).to eq(Hekenga::Failure::Validation)
+      expect(failure.pkey).to eq(migration.to_key)
+      expect(failure.task_idx).to eq(0)
+      expect(failure.document["num"]).to eq(100)
+      expect(failure.doc_id).to eq(doc.id)
+      expect(failure.errs).to eq(["Num Can't be 100"])
+    end
   end
   describe "invalid strategies" do
     let(:migration) do
