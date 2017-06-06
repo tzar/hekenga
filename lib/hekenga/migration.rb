@@ -253,16 +253,16 @@ module Hekenga
       end
     end
     def run_parallel_task(task_idx, ids)
+      @active_idx = task_idx
       if log(task_idx).cancel
         failed_cancelled!(ids)
         return
       end
       task = self.tasks[task_idx] or return
-      @active_idx = task_idx
       with_setup(task) do
-        process_batch(task, task.scope.asc(:_id).in(_id: ids).to_a)
+        process_batch(task, task.scope.klass.asc(:_id).in(_id: ids).to_a)
         unless @skipped.empty?
-          failed_cancelled!(@skipped)
+          failed_cancelled!(@skipped.map(&:_id))
         end
       end
     end
