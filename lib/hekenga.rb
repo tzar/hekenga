@@ -5,6 +5,7 @@ require "hekenga/dsl"
 require "hekenga/config"
 require "hekenga/irreversible"
 require "hekenga/virtual_method"
+require "hekenga/scaffold"
 
 module Hekenga
   class << self

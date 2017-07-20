@@ -8,6 +8,7 @@ end
 
 require "hekenga"
 require "thor"
+require "pathname"
 
 class HekengaCLI < Thor
   desc "status", "Show which migrations have run and their status."
@@ -110,6 +111,23 @@ class HekengaCLI < Thor
     puts "Done!"
   end
 
+  desc "generate <description> --edit", "Generate a migration scaffold (and optionally edit in your editor)."
+  option :edit
+  def generate(*description)
+    description = description.join(" ")
+    scaffold = Hekenga::Scaffold.new(description)
+    scaffold.write!
+    puts "Done! You can find your migration in:"
+    path = Pathname.new(scaffold.to_path).relative_path_from(Pathname.new(Dir.pwd)).to_s
+    puts path
+    if options[:edit]
+      if !ENV["EDITOR"]
+        puts "You need to set EDITOR in your ENV to use this feature."
+        exit(0)
+      end
+      exec "$EDITOR #{path}"
+    end
+  end
   private
 
   def todo(op)
