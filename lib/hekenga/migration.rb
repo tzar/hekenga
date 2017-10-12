@@ -251,6 +251,7 @@ module Hekenga
           self.to_key, task_idx, ids.map(&:to_s), !!@test_mode
         )
       end
+      check_for_completion # if 0 items to migrate
     end
     def run_parallel_task(task_idx, ids)
       @active_idx = task_idx
