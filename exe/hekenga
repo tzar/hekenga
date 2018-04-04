@@ -22,6 +22,8 @@ class HekengaCLI < Thor
                  "FAILED"
                when :complete
                  "COMPLT"
+               when :skipped
+                 "SKIPPD"
                else
                  "UN-RUN"
                end
@@ -100,7 +102,7 @@ class HekengaCLI < Thor
     migration = load_migration(path_or_pkey)
     puts "Skipping #{migration.to_key}.."
     migration.tasks.each.with_index do |task, idx|
-      log = Hekenga::Log.where(pkey: task.to_key, task_idx: idx).first ||
+      log = Hekenga::Log.where(pkey: migration.to_key, task_idx: idx).first ||
         Hekenga::Log.new(migration: migration, task_idx: idx)
 
       log.done = true
