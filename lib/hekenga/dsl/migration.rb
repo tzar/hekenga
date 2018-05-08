@@ -6,7 +6,7 @@ module Hekenga
       configures Hekenga::Migration
 
       def batch_size(size)
-        unless size.is_a?(Fixnum) && size > 0
+        unless size.is_a?(Integer) && size > 0
           raise "Invalid batch size #{size.inspect}"
         end
         @object.batch_size = size
