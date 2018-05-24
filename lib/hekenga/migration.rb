@@ -76,7 +76,6 @@ module Hekenga
       when Hekenga::DocumentTask
         # TODO - online migration support (have log.total update, requeue)
         scope ||= task.scope.asc(:_id)
-        create_log!(total: scope.count)
         if task.parallel
           start_parallel_task(task, task_idx, scope)
         else
@@ -246,7 +245,9 @@ module Hekenga
     end
     def start_parallel_task(task, task_idx, scope)
       # TODO - support for crazy numbers of documents where pluck is too big
-      scope.asc(:_id).pluck(:_id).take(log.total).each_slice(batch_size).each do |ids|
+      scope.asc(:_id).pluck(:_id).tap do |all_ids|
+        create_log!(total: all_ids.length)
+      end.each_slice(batch_size).each do |ids|
         Hekenga::ParallelJob.perform_later(
           self.to_key, task_idx, ids.map(&:to_s), !!@test_mode
         )
@@ -279,6 +280,7 @@ module Hekenga
       end
     end
     def start_document_task(task, task_idx, scope)
+      create_log!(total: scope.count)
       records = []
       with_setup(task) do
         scope.asc(:_id).each do |record|
