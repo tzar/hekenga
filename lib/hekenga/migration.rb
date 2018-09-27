@@ -283,7 +283,7 @@ module Hekenga
       create_log!(total: scope.count)
       records = []
       with_setup(task) do
-        scope.asc(:_id).each do |record|
+        scope.asc(:_id).no_timeout.each do |record|
           records.push(record)
           if records.length == batch_size
             process_batch(task, records)
