@@ -45,7 +45,7 @@ module Hekenga
     def incr_and_return(fields)
       doc = self.class.where(_id: self.id).find_one_and_update({
         :$inc => fields
-      }, return_document: :after, projection: fields.keys.map {|x| [x, 1]}.to_h)
+      }, return_document: :after, projection: fields.keys.map {|x| [x, 1]}.to_h, upsert: true)
       fields.map do |field, _|
         value = doc.send(field)
         send("#{field}=", value)
