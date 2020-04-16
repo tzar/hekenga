@@ -16,7 +16,8 @@ module Hekenga
     end
 
     def to_path
-      @path ||= File.join(Hekenga.config.abs_dir, @migration.to_key+".rb")
+      @path ||= File.join(Hekenga.config.abs_dir, @migration.to_key.gsub(/\:/, '-') +
+        '.rb')
     end
 
     def to_s
