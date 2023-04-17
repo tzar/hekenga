@@ -247,7 +247,7 @@ module Hekenga
       # TODO - support for crazy numbers of documents where pluck is too big
       scope.asc(:_id).pluck(:_id).tap do |all_ids|
         create_log!(total: all_ids.length)
-      end.each_slice(batch_size).each do |ids|
+      end.each_slice(task.batch_size || batch_size).each do |ids|
         Hekenga::ParallelJob.perform_later(
           self.to_key, task_idx, ids.map(&:to_s), !!@test_mode
         )
@@ -285,7 +285,7 @@ module Hekenga
       with_setup(task) do
         scope.asc(:_id).no_timeout.each do |record|
           records.push(record)
-          if records.length == batch_size
+          if records.length == (task.batch_size || batch_size)
             process_batch(task, records)
             return if log.cancel
             records = []
@@ -370,19 +370,57 @@ module Hekenga
         end
       end
       begin
-        delete_records!(task.scope.klass, records.map(&:_id))
-        write_records!(task.scope.klass, records)
+        write_result!(task, records)
         log_success(task, records)
       rescue => e
         failed_write!(e, original_records)
       end
     end
-    def delete_records!(klass, ids)
-      klass.in(_id: ids).delete_all if ids.any?
+
+    def write_result!(task, records)
+      klass = task.scope.klass
+      case task.write_strategy
+      when :delete_then_insert
+        delete_then_insert_records!(klass, records)
+      else
+        update_many!(klass, records)
+      end
     end
-    def write_records!(klass, records)
-      klass.collection.insert_many(records.map(&:as_document)) if records.any?
+
+    def update_many!(klass, records)
+      return unless records.any?
+
+      klass.collection.bulk_write(records.map do |record|
+        {
+          replace_one: {
+            filter: { _id: record.id },
+            replacement: record.as_document
+          }
+        }
+      end)
     end
+
+    def delete_then_insert_records!(klass, records)
+      return unless records.any?
+
+      operations = [delete_operation(records)] + records.map do |record|
+        { insert_one: record.as_document }
+      end
+      klass.collection.bulk_write(operations, ordered: true)
+    end
+
+    def delete_operation(records)
+      {
+        delete_many: {
+          filter: {
+            _id: {
+              '$in': records.map(&:id)
+            }
+          }
+        }
+      }
+    end
+
     def simple_failure!(error)
       log.add_failure({
         message:   error.to_s,

@@ -23,7 +23,7 @@ describe "Tasks with write errors" do
     end
 
     before do
-      expect(migration).to receive(:write_records!) do
+      expect(migration).to receive(:write_result!) do
         raise "Write error"
       end
     end
@@ -43,8 +43,6 @@ describe "Tasks with write errors" do
       expect(failure.task_idx).to eq(0)
       expect(failure.documents).to eq(documents)
       expect(failure.message).to eq("Write error")
-
-      expect(Example.count).to eq(0)
     end
   end
 end

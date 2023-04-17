@@ -2,15 +2,17 @@ require 'hekenga/irreversible'
 module Hekenga
   class DocumentTask
     attr_reader :ups, :downs, :setups, :filters
-    attr_accessor :parallel, :scope, :timeless
-    attr_accessor :description, :invalid_strategy, :skip_prepare
+    attr_accessor :parallel, :scope, :timeless, :batch_size
+    attr_accessor :description, :invalid_strategy, :skip_prepare, :write_strategy
     def initialize
       @ups              = []
       @downs            = []
       @setups           = []
       @filters          = []
       @invalid_strategy = :prompt
+      @write_strategy   = :update
       @skip_prepare     = false
+      @batch_size       = nil
     end
 
     def validate!

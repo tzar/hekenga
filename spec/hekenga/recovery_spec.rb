@@ -42,10 +42,10 @@ describe "Hekenga#recover!" do
       Hekenga.migration do
         description "error mix"
         created "2017-03-31 17:00"
-        batch_size 1
 
         per_document do
           scope Example.all
+          batch_size 1
           up do |doc|
             # General error
             raise "fail" if doc.num == 1
@@ -63,9 +63,10 @@ describe "Hekenga#recover!" do
     break_on_write = true
     before do
       # Write error
-      allow(migration).to receive(:write_records!) do |klass, records|
+      original_write = migration.method(:write_result!)
+      allow(migration).to receive(:write_result!) do |*args|
         raise "fail" if break_on_write
-        klass.collection.insert_many(records.map(&:as_document))
+        original_write.call(*args)
       end
       allow(migration).to receive(:prompt).and_return(true)
       migration.perform!
@@ -78,8 +79,7 @@ describe "Hekenga#recover!" do
       Example.all.inc(num: 5)
       expect(migration.recover!).to eq(true)
       expect(Example.count).to eq(3)
-      # 5 because the cached record that gets written back doesn't get inc'd
-      expect(Example.pluck(:num).sort).to eq([5, 11, 12])
+      expect(Example.pluck(:num).sort).to eq([10, 11, 12])
     end
     it "should recover when failed again then fixed" do
       break_on_write = false
@@ -117,9 +117,10 @@ describe "Hekenga#recover!" do
     break_on_write = true
     before do
       # Write error
-      allow(migration).to receive(:write_records!) do |klass, records|
+      original_write = migration.method(:write_result!)
+      allow(migration).to receive(:write_result!) do |*args|
         raise "fail" if break_on_write
-        klass.collection.insert_many(records.map(&:as_document))
+        original_write.call(*args)
       end
       allow(migration).to receive(:prompt).and_return(true)
       perform_enqueued_jobs { migration.perform! }

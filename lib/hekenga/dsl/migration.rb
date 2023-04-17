@@ -11,12 +11,15 @@ module Hekenga
         end
         @object.batch_size = size
       end
+
       def created(stamp = nil)
         @object.stamp = Time.parse(stamp)
       end
+
       def task(description = nil, &block)
         @object.tasks.push Hekenga::DSL::SimpleTask.new(description, &block).object
       end
+
       def per_document(description = nil, &block)
         @object.tasks.push Hekenga::DSL::DocumentTask.new(description, &block).object
       end
