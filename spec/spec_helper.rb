@@ -4,7 +4,7 @@ $LOAD_PATH.unshift File.expand_path("../../lib", __FILE__)
 MODELS = File.join(File.dirname(__FILE__), "models")
 
 require "pry"
-require "database_cleaner"
+require "database_cleaner-mongoid"
 require "hekenga"
 
 Dir["#{MODELS}/*.rb"].each {|f| require f}
@@ -17,7 +17,6 @@ Hekenga.configure do |config|
   config.report_sleep = 1
 end
 Mongo::Logger.level = ::Logger::FATAL
-DatabaseCleaner.orm = "mongoid"
 ActiveJob::Base.queue_adapter = :test
 ActiveJob::Base.logger = nil
 
