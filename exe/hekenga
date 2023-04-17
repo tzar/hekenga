@@ -114,7 +114,7 @@ class HekengaCLI < Thor
   end
 
   desc "generate <description> --edit", "Generate a migration scaffold (and optionally edit in your editor)."
-  option :edit
+  option :edit, type: :boolean
   def generate(*description)
     description = description.join(" ")
     scaffold = Hekenga::Scaffold.new(description)
