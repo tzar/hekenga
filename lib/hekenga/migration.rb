@@ -378,10 +378,10 @@ module Hekenga
       end
     end
     def delete_records!(klass, ids)
-      klass.in(_id: ids).delete_all
+      klass.in(_id: ids).delete_all if ids.any?
     end
     def write_records!(klass, records)
-      klass.collection.insert_many(records.map(&:as_document))
+      klass.collection.insert_many(records.map(&:as_document)) if records.any?
     end
     def simple_failure!(error)
       log.add_failure({
