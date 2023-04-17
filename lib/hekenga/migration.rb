@@ -341,21 +341,29 @@ module Hekenga
       )
       check_for_completion
     end
-    def log_success(task, records)
+    def log_success(task, processed, skipped)
       log.incr_and_return(
-        processed: records.length
+        skipped: skipped,
+        processed: processed
       )
       check_for_completion
     end
 
     def persist_batch(task, records, original_records)
+      if task.always_write
+        records_to_write = records
+        unchanged_count = 0
+      else
+        records_to_write = records.filter(&:changed?)
+        unchanged_count = records.length - records_to_write.length
+      end
       if @test_mode
-        log_success(task, records)
+        log_success(task, records.length, unchanged_count)
         return
       end
       # NOTE - edgecase where callbacks cause the record to become invalid is
       # not covered
-      records.each do |record|
+      records_to_write.each do |record|
         begin
           next if task.skip_prepare
           if task.timeless
@@ -365,13 +373,13 @@ module Hekenga
           end
         rescue => e
           # If prepare_update throws an error, we're in trouble - crash out now
-          failed_apply!(e, record, records[0].id)
+          failed_apply!(e, record, records_to_write[0].id)
           return
         end
       end
       begin
-        write_result!(task, records)
-        log_success(task, records)
+        write_result!(task, records_to_write)
+        log_success(task, records.length, unchanged_count)
       rescue => e
         failed_write!(e, original_records)
       end

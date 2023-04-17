@@ -32,6 +32,10 @@ module Hekenga
         @object.scope = scope
       end
 
+      def always_write!
+        @object.always_write = true
+      end
+
       def parallel!
         @object.parallel = true
       end

@@ -51,6 +51,38 @@ describe Hekenga::DocumentTask do
     end
   end
 
+  describe "skipping unchanged records" do
+    let(:migration) do
+      Hekenga.migration do
+        description "Skipping unchanged records"
+        created "2023-04-17 15:11"
+
+        per_document "Demo" do
+          scope Example.all
+          up do |doc|
+            next unless doc.num == 1
+            doc.num += 1
+          end
+        end
+      end
+    end
+
+    it "skips un-needed writes" do
+      expect(migration).to(receive(:write_result!) do |_klass, records|
+        expect(records.length).to eq(1) # Rest are skipped
+      end)
+      migration.perform!
+    end
+
+    it "doesn't skip when always_write! is enabled" do
+      migration.tasks[0].always_write = true
+      expect(migration).to(receive(:write_result!) do |_klass, records|
+        expect(records.length).to eq(3)
+      end)
+      migration.perform!
+    end
+  end
+
   context "delete_then_insert records mode" do
     describe "single task up block" do
       let(:migration) do
@@ -61,6 +93,7 @@ describe Hekenga::DocumentTask do
           per_document "Demo" do
             scope Example.gt(num: 0)
             write_strategy :delete_then_insert
+            always_write!
 
             setup do
               @increment = 1
