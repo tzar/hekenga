@@ -1,0 +1,30 @@
+version: "3.8"
+
+volumes:
+  mongo:
+
+networks:
+  hekenga-net:
+
+services:
+  mongo:
+    image: mongo:5
+    command: ["--replSet", "rs0", "--bind_ip", "localhost,mongo"]
+    volumes:
+      - mongo:/data/db
+    ports:
+      - 27017:27017
+    networks:
+      - hekenga-net
+
+  mongosetup:
+    image: mongo:5
+    depends_on:
+      - mongo
+    restart: "no"
+    entrypoint:
+      - bash
+      - "-c"
+      - "sleep 3 && mongo --host mongo:27017 --eval 'rs.initiate({_id: \"rs0\", members: [{_id: 0, host: \"localhost:27017\"}]})'"
+    networks:
+      - hekenga-net
