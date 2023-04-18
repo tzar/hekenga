@@ -6,6 +6,7 @@ describe "Tasks with write errors" do
       Example.create! string: "idx-#{idx}", num: idx
     end
   end
+
   describe "doc task that does nothing" do
     let(:migration) do
       Hekenga.migration do
@@ -43,6 +44,39 @@ describe "Tasks with write errors" do
       expect(failure.task_idx).to eq(0)
       expect(failure.documents).to eq(documents)
       expect(failure.message).to eq("Write error")
+    end
+  end
+
+  describe "transactional task" do
+    let(:migration) do
+      Hekenga.migration do
+        description "Broken"
+        created "2017-03-31 17:00"
+        batch_size 3
+
+        per_document "nothing" do
+          scope Example.all
+          use_transaction!
+          up do |doc|
+            # NOOP
+          end
+        end
+      end
+    end
+
+    before do
+      expect(migration).to receive(:write_result!) do
+        raise "Write error"
+      end
+    end
+
+    it "should crash so the job can retry" do
+      expect { migration.perform!  }.to raise_error(RuntimeError).with_message("Write error")
+      log = migration.log(0)
+
+      expect(log.error).to eq(false)
+      expect(log.cancel).to eq(false)
+      expect(log.failures.count).to eq(0)
     end
   end
 end

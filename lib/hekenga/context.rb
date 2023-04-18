@@ -1,14 +1,18 @@
 module Hekenga
   class Context
-    def initialize(test_run)
-      @__test_run = test_run
+    attr_reader :migration
+    delegate :session, to: :migration
+
+    def initialize(migration)
+      @migration = migration
+    end
+
+    def actual?
+      !migration.test_mode
     end
 
     def test?
-      !!@__test_run
-    end
-    def actual?
-      !@__test_run
+      !actual?
     end
   end
 end

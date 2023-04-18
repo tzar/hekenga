@@ -6,7 +6,7 @@ require 'hekenga/log'
 module Hekenga
   class Migration
     attr_accessor :stamp, :description, :batch_size
-    attr_reader :tasks
+    attr_reader :tasks, :session, :test_mode
 
     def initialize
       @tasks      = []
@@ -76,6 +76,7 @@ module Hekenga
       when Hekenga::DocumentTask
         # TODO - online migration support (have log.total update, requeue)
         scope ||= task.scope.asc(:_id)
+        ensure_replicaset!(task)
         if task.parallel
           start_parallel_task(task, task_idx, scope)
         else
@@ -241,7 +242,7 @@ module Hekenga
       end
     end
     def log_done!
-      log.set(done: true, finished: Time.now)
+      log.set_without_session({done: true, finished: Time.now})
     end
     def start_parallel_task(task, task_idx, scope)
       # TODO - support for crazy numbers of documents where pluck is too big
@@ -269,7 +270,7 @@ module Hekenga
       end
     end
     def with_setup(task = nil)
-      @context = Hekenga::Context.new(@test_mode)
+      @context = Hekenga::Context.new(self)
       task&.setups&.each do |block|
         @context.instance_exec(&block)
       end
@@ -304,48 +305,86 @@ module Hekenga
       record.as_document.deep_dup
     end
     def process_batch(task, records)
-      @skipped   = []
-      to_persist = []
-      fallbacks  = []
+      with_transaction(task) do
+        @skipped   = []
+        to_persist = []
+        fallbacks  = []
 
-      filtered = records.group_by do |record|
-        run_filters(task, record)
-      end
-      log_skipped(task, filtered[false]) if filtered[false]
-      return unless filtered[true]
-      filtered[true].map.with_index do |record, idx|
-        original_record = deep_clone(record)
-        begin
-          task.up!(@context, record)
-        rescue => e
-          failed_apply!(e, record, records[0].id)
-          @skipped = filtered[true][idx+1..-1]
-          return
+        filtered = records.group_by do |record|
+          run_filters(task, record)
         end
-        if validate_record(task, record)
-          to_persist.push(record)
-          fallbacks.push(original_record)
-        else
-          if log.cancel
-            @skipped = filtered[true][idx+1..-1]
+        log_skipped(task, filtered[false]) if filtered[false]
+        return unless filtered[true]
+        filtered[true].map.with_index do |record, idx|
+          original_record = deep_clone(record)
+          begin
+            task.up!(@context, record)
+          rescue => e
+            failed_apply!(e, record, records[0].id)
+            @skipped = filtered[true]
+            @abort_transaction = true
             return
           end
-        end
-      end.compact
-      persist_batch(task, to_persist, fallbacks)
+          if validate_record(task, record)
+            to_persist.push(record)
+            fallbacks.push(original_record)
+          else
+            if log.cancel
+              @skipped = filtered[true]
+              @abort_transaction = true
+              return
+            end
+          end
+        end.compact
+        persist_batch(task, to_persist, fallbacks)
+      end
     end
+
+    def with_transaction(task, &block)
+      return yield unless task.use_transaction
+
+      ensure_replicaset!(task)
+      klass = task.scope.klass
+      # NOTE: Dummy session to work around threading bug
+      klass.persistence_context.client.start_session({})
+      klass.with_session do |session|
+        @session = session
+        @session.start_transaction
+        @abort_transaction = false
+        yield
+        if @test_mode || @abort_transaction
+          @session.abort_transaction
+        else
+          @session.commit_transaction
+        end
+      rescue
+        @session.abort_transaction
+        raise
+      ensure
+        @session = nil
+      end
+    end
+
+    def ensure_replicaset!(task)
+      return unless task.use_transaction
+
+      unless task.scope.klass.collection.client.cluster.replica_set?
+        raise "MongoDB must be in a replica set to use transactions"
+      end
+    end
+
     def log_skipped(task, records)
-      log.incr_and_return(
+      log.incr_and_return({
         skipped:   records.length,
         processed: records.length
-      )
+      })
       check_for_completion
     end
     def log_success(task, processed, skipped)
-      log.incr_and_return(
+      log.incr_and_return({
         skipped: skipped,
         processed: processed
-      )
+      })
       check_for_completion
     end
 
@@ -374,6 +413,7 @@ module Hekenga
         rescue => e
           # If prepare_update throws an error, we're in trouble - crash out now
           failed_apply!(e, record, records_to_write[0].id)
+          @abort_transaction = true
           return
         end
       end
@@ -381,6 +421,9 @@ module Hekenga
         write_result!(task, records_to_write)
         log_success(task, records.length, unchanged_count)
       rescue => e
+        # If we're in a transaction, a failed write is retryable - crash so the
+        # job will requeue
+        raise e if session
         failed_write!(e, original_records)
       end
     end
@@ -405,7 +448,7 @@ module Hekenga
             replacement: record.as_document
           }
         }
-      end)
+      end, **bulk_options)
     end
 
     def delete_then_insert_records!(klass, records)
@@ -414,7 +457,13 @@ module Hekenga
       operations = [delete_operation(records)] + records.map do |record|
         { insert_one: record.as_document }
       end
-      klass.collection.bulk_write(operations, ordered: true)
+      klass.collection.bulk_write(operations, ordered: true, **bulk_options)
+    end
+
+    def bulk_options
+      return {} if session.nil?
+
+      { session: session }
     end
 
     def delete_operation(records)
@@ -453,7 +502,8 @@ module Hekenga
       log_cancel!
     end
     def log_cancel!
-      log.set(cancel: true, error: true, done: true, finished: Time.now)
+      # Bypass the active transaction if there is one
+      log.set_without_session({cancel: true, error: true, done: true, finished: Time.now})
     end
     def failed_write!(error, original_records)
       log.add_failure({
@@ -471,8 +521,8 @@ module Hekenga
         errs:     record.errors.full_messages,
         document: deep_clone(record),
       }, Hekenga::Failure::Validation)
-      log.set(error: true)
-      log.incr_and_return(processed: 1, unvalid: 1)
+      log.set_without_session({error: true})
+      log.incr_and_return({processed: 1, unvalid: 1})
       if task.invalid_strategy == :cancel
         log_cancel!
       else

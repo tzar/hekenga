@@ -98,7 +98,10 @@ module Hekenga
       Hekenga.log "Launching task##{idx}: #{task.description}"
       @active_thread = Thread.new do
         @migration.perform_task!(idx, scope)
-      end.tap {|t| t.abort_on_exception = true }
+      end.tap do |t|
+        t.report_on_exception = false
+        t.abort_on_exception = true
+      end
     end
     def report_while_active(task, idx)
       # Wait for the log to be generated
@@ -112,7 +115,7 @@ module Hekenga
         return if @migration.log(idx).cancel
         sleep Hekenga.config.report_sleep
       end
-      report_status(task, idx)
+      report_status(task, idx) if task.is_a?(Hekenga::DocumentTask)
       return if @migration.log(idx).cancel
       report_errors(idx)
       Hekenga.log "Completed"

@@ -83,6 +83,32 @@ describe Hekenga::DocumentTask do
     end
   end
 
+  describe "transactions" do
+    describe "failure during the migration" do
+      let(:migration) do
+        Hekenga.migration do
+          description "Transactions"
+          created "2023-04-18 12:25"
+
+          per_document "Demo" do
+            scope Example.all
+            use_transaction!
+
+            up do |doc|
+              Example.all.inc(num: 1)
+              raise "error" # to abort the transaction
+            end
+          end
+        end
+      end
+
+      it "doesn't commit the transaction" do
+        migration.perform!
+        expect(Example.all.pluck(:num)).to eq([0, 1, 2])
+      end
+    end
+  end
+
   context "delete_then_insert records mode" do
     describe "single task up block" do
       let(:migration) do

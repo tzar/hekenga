@@ -48,6 +48,16 @@ describe "Hekenga::DocumentTask (parallel)", type: :job do
       end
       expect(Example.asc(:_id).pluck(:num)).to eq([0, 1, 3])
     end
+    context "in transaction mode" do
+      before { migration.tasks[0].use_transaction = true }
+
+      it "should carry out the migration" do
+        perform_enqueued_jobs do
+          migration.perform!
+        end
+        expect(Example.asc(:_id).pluck(:num)).to eq([0, 1, 3])
+      end
+    end
     it "should log correctly" do
       perform_enqueued_jobs do
         migration.perform!

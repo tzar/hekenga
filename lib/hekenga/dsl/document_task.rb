@@ -36,6 +36,10 @@ module Hekenga
         @object.always_write = true
       end
 
+      def use_transaction!
+        @object.use_transaction = true
+      end
+
       def parallel!
         @object.parallel = true
       end

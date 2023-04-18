@@ -4,7 +4,8 @@ module Hekenga
     attr_reader :ups, :downs, :setups, :filters
     attr_accessor :parallel, :scope, :timeless, :batch_size
     attr_accessor :description, :invalid_strategy, :skip_prepare, :write_strategy
-    attr_accessor :always_write
+    attr_accessor :always_write, :use_transaction
+
     def initialize
       @ups              = []
       @downs            = []
@@ -15,6 +16,7 @@ module Hekenga
       @skip_prepare     = false
       @batch_size       = nil
       @always_write     = false
+      @use_transaction  = false
     end
 
     def validate!
