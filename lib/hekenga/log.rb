@@ -18,12 +18,7 @@ module Hekenga
     field :skip,   default: false
 
     # Used by document tasks
-    field :total
-    field :processed, default: 0
-    field :skipped,   default: 0
-    field :unvalid,   default: 0
-    field :started,   default: ->{ Time.now }
-    field :finished,  type:    Time
+    field :finished, type: Time
 
     has_many :failures, class_name: "Hekenga::Failure"
 
@@ -51,20 +46,6 @@ module Hekenga
         session: nil
       )
       self.attributes = attrs
-    end
-
-    def incr_and_return(fields)
-      doc = self.class.where(_id: self.id).find_one_and_update(
-        {'$inc': fields},
-        return_document: :after,
-        projection: fields.keys.map {|x| [x, 1]}.to_h,
-        session: nil
-      )
-      fields.map do |field, _|
-        value = doc.send(field)
-        send("#{field}=", value)
-        [field, value]
-      end.to_h
     end
   end
 end

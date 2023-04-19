@@ -50,15 +50,19 @@ module Hekenga
     def reload_logs
       @logs = {}
     end
+
     def performing?
       Hekenga::Log.where(pkey: self.to_key, done: false).any?
     end
+
     def performed?
       !!log(self.tasks.length - 1).done
     end
+
     def test_mode!
       @test_mode = true
     end
+
     def perform!
       if Hekenga.status(self) == :naught
         Hekenga::MasterProcess.new(self).run!
@@ -67,6 +71,7 @@ module Hekenga
         return false
       end
     end
+
     def perform_task!(task_idx = 0, scope = nil)
       task         = @tasks[task_idx] or return
       @active_idx  = task_idx
@@ -84,6 +89,7 @@ module Hekenga
         end
       end
     end
+
     def recover!
       # NOTE - can't find a way to check this automatically with ActiveJob right now
       return false unless prompt "Check that the migration queue has processed before recovering. Continue?"
@@ -241,9 +247,11 @@ module Hekenga
         log_done!
       end
     end
+
     def log_done!
       log.set_without_session({done: true, finished: Time.now})
     end
+
     def start_parallel_task(task, task_idx, scope)
       # TODO - support for crazy numbers of documents where pluck is too big
       scope.asc(:_id).pluck(:_id).tap do |all_ids|
@@ -255,6 +263,7 @@ module Hekenga
       end
       check_for_completion # if 0 items to migrate
     end
+
     def run_parallel_task(task_idx, ids)
       @active_idx = task_idx
       if log(task_idx).cancel
@@ -269,6 +278,7 @@ module Hekenga
         end
       end
     end
+
     def with_setup(task = nil)
       @context = Hekenga::Context.new(self)
       task&.setups&.each do |block|
@@ -280,6 +290,7 @@ module Hekenga
         @context = nil
       end
     end
+
     def start_document_task(task, task_idx, scope)
       create_log!(total: scope.count)
       records = []
@@ -296,14 +307,17 @@ module Hekenga
       end
       log_done!
     end
+
     def run_filters(task, record)
       task.filters.all? do |block|
         @context.instance_exec(record, &block)
       end
     end
+
     def deep_clone(record)
       record.as_document.deep_dup
     end
+
     def process_batch(task, records)
       with_transaction(task) do
         @skipped   = []
@@ -380,6 +394,7 @@ module Hekenga
       })
       check_for_completion
     end
+
     def log_success(task, processed, skipped)
       log.incr_and_return({
         skipped: skipped,
@@ -486,12 +501,14 @@ module Hekenga
       }, Hekenga::Failure::Error)
       log_cancel!
     end
+
     def failed_cancelled!(ids)
       log.add_failure({
         document_ids: ids,
         batch_start: ids[0]
       }, Hekenga::Failure::Cancelled)
     end
+
     def failed_apply!(error, record, batch_start_id)
       log.add_failure({
         message:     error.to_s,
@@ -501,10 +518,12 @@ module Hekenga
       }, Hekenga::Failure::Error)
       log_cancel!
     end
+
     def log_cancel!
       # Bypass the active transaction if there is one
       log.set_without_session({cancel: true, error: true, done: true, finished: Time.now})
     end
+
     def failed_write!(error, original_records)
       log.add_failure({
         message:      error.to_s,
@@ -515,6 +534,7 @@ module Hekenga
       }, Hekenga::Failure::Write)
       log_cancel!
     end
+
     def failed_validation!(task, record)
       log.add_failure({
         doc_id:   record.id,
@@ -529,6 +549,7 @@ module Hekenga
         check_for_completion
       end
     end
+
     def validate_record(task, record)
       # TODO - ability to skip validation
       # TODO - handle errors on validation
