@@ -62,11 +62,11 @@ describe "Hekenga::DocumentTask (parallel)", type: :job do
       perform_enqueued_jobs do
         migration.perform!
       end
+      process = Hekenga::MasterProcess.new(migration)
+      stats = process.send(:combined_stats, 0)
       log = Hekenga::Log.last
-      expect(log.total).to eq(2)
-      expect(log.processed).to eq(2)
       expect(log.done).to eq(true)
-      expect(log.skipped).to eq(1)
+      expect(stats).to eq("failed" => 0, "invalid" => 0, "written" => 1)
     end
     context "test mode" do
       it "should not persist" do

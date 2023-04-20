@@ -11,7 +11,7 @@ module Hekenga
       @downs            = []
       @setups           = []
       @filters          = []
-      @invalid_strategy = :prompt
+      @invalid_strategy = :continue
       @write_strategy   = :update
       @skip_prepare     = false
       @batch_size       = nil

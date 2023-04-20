@@ -1,19 +1,23 @@
+require 'hekenga/iterator'
+require 'hekenga/document_task_executor'
+
 module Hekenga
   class ParallelTask
-    attr_reader :migration, :task, :task_idx
+    attr_reader :migration, :task, :task_idx, :test_mode
 
     def initialize(migration:, task:, task_idx:, test_mode:)
       @migration = migration
       @task      = task
       @task_idx  = task_idx
+      @test_mode = test_mode
     end
 
     def start!
       clear_task_records!
       @executor_key = BSON::ObjectId.new
-      Hekenga::Iterator.new(scope, size: 100_000).each do |id_block|
+      Hekenga::Iterator.new(task.scope, size: 100_000).each do |id_block|
         task_records = id_block.each_slice(batch_size).map do |id_slice|
-          generate_parallel_record(id_slice)
+          generate_task_records!(id_slice)
         end
         write_task_records!(task_records)
         queue_jobs!(task_records)
@@ -57,7 +61,7 @@ module Hekenga
     end
 
     def task_records
-      Hekenga::DocumentTaskRecord.where(migration_key: migration.to_key, task_idx: task_idx)
+      migration.task_records(task_idx)
     end
 
     def generate_task_records!(id_slice)
@@ -80,7 +84,7 @@ module Hekenga
 
     def queue_jobs!(records)
       records.each do |record|
-        Hekenga::ParallelJob.perform_async(record.id, @executor_key)
+        Hekenga::ParallelJob.perform_later(record.id.to_s, @executor_key.to_s)
       end
     end
   end

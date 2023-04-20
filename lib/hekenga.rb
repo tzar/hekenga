@@ -12,35 +12,37 @@ module Hekenga
     def configure
       yield(config)
     end
+
     def config
       @config ||= Hekenga::Config.new
     end
+
     def load_all!
       return if @loaded
       Dir.glob(File.join(config.abs_dir, "*.rb")).each do |path|
         require path
       end.tap { @loaded = true }
     end
+
     def migration(&block)
       Hekenga::DSL::Migration.new(&block).object.tap do |obj|
         self.registry.push(obj)
       end
     end
+
     def find_migration(key)
       load_all!
       registry.detect do |migration|
         migration.to_key == key
       end
     end
+
     def registry
       @registry || reset_registry
     end
+
     def reset_registry
       @registry = []
-    end
-
-    def any_fatal?
-      Hekenga::Log.where(cancel: true, skip: false).any?
     end
 
     def status(migration)
@@ -53,6 +55,7 @@ module Hekenga
       return :complete if logs.all? {|x| x.done} && logs.length == migration.tasks.length
       return :running
     end
+
     def log(str)
       print str.to_s+"\n"
     end

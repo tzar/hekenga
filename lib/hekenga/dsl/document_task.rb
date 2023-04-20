@@ -4,7 +4,7 @@ module Hekenga
     class DocumentTask < Hekenga::DSL
       configures Hekenga::DocumentTask
 
-      INVALID_BEHAVIOR_STRATEGIES = [:prompt, :cancel, :stop, :continue]
+      INVALID_BEHAVIOR_STRATEGIES = %i[continue]
       VALID_WRITE_STRATEGIES = %i[delete_then_insert update]
 
       def batch_size(size)

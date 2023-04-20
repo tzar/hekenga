@@ -45,7 +45,6 @@ module Hekenga
         #  #timeless!
         #  #always_write!
         #  #skip_prepare!
-        #  #when_invalid :prompt # :prompt, :cancel, :stop, :continue
         #  #batch_size 25
         #  #write_strategy :update # :delete_then_insert
         #

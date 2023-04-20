@@ -77,8 +77,8 @@ describe "Tasks with invalid result" do
       end
     end
     before { allow(migration).to receive(:prompt).and_return(true) }
-    it "has a default strategy of :prompt" do
-      expect(migration.tasks[0].invalid_strategy).to eq(:prompt)
+    it "has a default strategy of :continue" do
+      expect(migration.tasks[0].invalid_strategy).to eq(:continue)
     end
     describe ":prompt" do
       before { migration.tasks[0].invalid_strategy = :prompt }

@@ -36,11 +36,11 @@ describe Hekenga::DocumentTask do
     end
     it "should log correctly" do
       migration.perform!
+      process = Hekenga::MasterProcess.new(migration)
+      stats = process.send(:combined_stats, 0)
       log = Hekenga::Log.last
-      expect(log.total).to eq(2)
-      expect(log.processed).to eq(2)
       expect(log.done).to eq(true)
-      expect(log.skipped).to eq(1)
+      expect(stats).to eq("failed" => 0, "invalid" => 0, "written" => 1)
     end
     context "test mode" do
       it "should not persist" do
@@ -68,44 +68,43 @@ describe Hekenga::DocumentTask do
     end
 
     it "skips un-needed writes" do
-      expect(migration).to(receive(:write_result!) do |_klass, records|
-        expect(records.length).to eq(1) # Rest are skipped
+      expect_any_instance_of(Hekenga::DocumentTaskExecutor).to(receive(:bulk_write) do |instance, operations, **kwargs|
+        expect(operations.length).to eq(1) # Rest are skipped
+        expect(operations.map(&:keys).flatten.uniq).to eq(%i[replace_one])
       end)
       migration.perform!
     end
 
     it "doesn't skip when always_write! is enabled" do
       migration.tasks[0].always_write = true
-      expect(migration).to(receive(:write_result!) do |_klass, records|
-        expect(records.length).to eq(3)
+      expect_any_instance_of(Hekenga::DocumentTaskExecutor).to(receive(:bulk_write) do |instance, operations, **kwargs|
+        expect(operations.length).to eq(3) # Rest are skipped
+        expect(operations.map(&:keys).flatten.uniq).to eq(%i[replace_one])
       end)
       migration.perform!
     end
   end
 
   describe "transactions" do
-    describe "failure during the migration" do
-      let(:migration) do
-        Hekenga.migration do
-          description "Transactions"
-          created "2023-04-18 12:25"
+    let(:migration) do
+      Hekenga.migration do
+        description "Transactions"
+        created "2023-04-18 12:25"
 
-          per_document "Demo" do
-            scope Example.all
-            use_transaction!
+        per_document "Demo" do
+          scope Example.all
+          use_transaction!
 
-            up do |doc|
-              Example.all.inc(num: 1)
-              raise "error" # to abort the transaction
-            end
+          up do |doc|
+            Example.all.inc(num: 1)
           end
         end
       end
+    end
 
-      it "doesn't commit the transaction" do
-        migration.perform!
-        expect(Example.all.pluck(:num)).to eq([0, 1, 2])
-      end
+    it "runs" do
+      migration.perform!
+      expect(Example.all.pluck(:num)).to eq([3, 4, 5])
     end
   end
 
@@ -142,11 +141,11 @@ describe Hekenga::DocumentTask do
       end
       it "should log correctly" do
         migration.perform!
+        process = Hekenga::MasterProcess.new(migration)
+        stats = process.send(:combined_stats, 0)
         log = Hekenga::Log.last
-        expect(log.total).to eq(2)
-        expect(log.processed).to eq(2)
         expect(log.done).to eq(true)
-        expect(log.skipped).to eq(1)
+        expect(stats).to eq("failed" => 0, "invalid" => 0, "written" => 1)
       end
       context "test mode" do
         it "should not persist" do

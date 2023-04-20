@@ -1,42 +1,162 @@
 module Hekenga
   class DocumentTaskExecutor
-    attr_reader :record
+    attr_reader :task_record
     attr_reader :context, :session
 
-    def initialize(record)
-      @record = record
+    def initialize(task_record, records: nil)
+      @task_record      = task_record
+      @records          = records
+      @migrated_records = []
+      @invalid_records  = []
+      @records_to_write = []
+      @filtered_records = []
+      @skipped_records  = []
+      @failed_records   = []
     end
 
     def run!
       with_setup do |context|
         with_transaction do |session|
-          process_batch
+          filter_records
+          run_migration
+          validate_records
+          write_records
+          write_result unless task_record.test_mode
         end
+        # In test mode, the transaction will be aborted - so we need to write
+        # the result outside of the run! block
+        write_result if task_record.test_mode
+      end
+    end
+
+    def check_for_completion!
+      if migration_complete?
+        migration.log(task_idx).set_without_session(done: true, finished: Time.now)
       end
     end
 
     private
 
-    def process_batch
-      # TODO
-      # - filter records
-      # - clone + migration records
-      # - filter unchanged (maybe)
-      # - validate records (maybe)
-      # - write records
-      # - write result
+    delegate :task_idx, to: :task_record
+
+    attr_reader :migrated_records, :records_to_write, :filtered_records, :invalid_records, :skipped_records, :failed_records
+
+    def migration_complete?
+      migration.task_records(task_idx).incomplete.none?
+    end
+
+    def record_scope
+      task.scope.klass.unscoped.in(_id: task_record.ids)
+    end
+
+    def records
+      @records ||= record_scope.to_a
+    end
+
+    def write_result
+      task_record.update_attributes(
+        complete: true,
+        finished: Time.now,
+        failed_ids: failed_records.map(&:_id),
+        invalid_ids: invalid_records.map(&:_id),
+        written_ids: records_to_write.map(&:_id),
+        stats: {
+          failed: failed_records.length,
+          invalid: invalid_records.length,
+          written: records_to_write.length
+        }
+      )
+    end
+
+    def filter_records
+      records.each do |record|
+        # TODO - rescue + fail
+        if task.filters.all? {|block| context.instance_exec(record, &block)}
+          filtered_records << record
+        else
+          skipped_records << record
+        end
+      end
+    end
+
+    def run_migration
+      filtered_records.each do |record|
+        task.up!(@context, record)
+        migrated_records << record
+      rescue => e
+        failed_records << record
+      end
+    end
+
+    def validate_records
+      migrated_records.each do |record|
+        if record.valid?
+          records_to_write << record
+        else
+          invalid_records << record
+        end
+      end
+    end
+
+    def write_records
+      records_to_write.keep_if(&:changed?) unless task.always_write
+      return if records_to_write.empty?
+      return if task_record.test_mode
+
+      records_to_write.each {|record| record.send(:prepare_update) {}}
+
+      case task.write_strategy
+      when :delete_then_insert
+        delete_then_insert_records
+      else
+        replace_records
+      end
+    end
+
+    def delete_then_insert_records
+      operations = []
+      operations << {
+        delete_many: {
+          filter: {
+            _id: {
+              '$in': records_to_write.map(&:_id)
+            }
+          }
+        }
+      }
+      records_to_write.each do |record|
+        operations << { insert_one: record.as_document }
+      end
+      bulk_write(operations, ordered: true)
+    end
+
+    def bulk_write(operations, **options)
+      task.scope.klass.collection.bulk_write(operations, session: session, **options)
+    end
+
+    def replace_records
+      operations = records_to_write.map do |record|
+        {
+          replace_one: {
+            filter: { _id: record._id },
+            replacement: record.as_document
+          }
+        }
+      end
+      bulk_write(operations)
     end
 
     def migration
-      @migration ||= Hekenga.find_migration(record.migration_key)
+      @migration ||= Hekenga.find_migration(task_record.migration_key)
     end
 
     def with_setup(&block)
-      @context = Hekenga::Context.new(migration)
+      @context = Hekenga::Context.new(test_mode: task_record.test_mode)
       task.setups&.each do |setup|
         @context.instance_exec(&setup)
       end
       yield
+    # TODO - rescue & cancel the migration with a failure
     ensure
       @context = nil
     end
@@ -51,9 +171,8 @@ module Hekenga
       klass.with_session do |session|
         @session = session
         @session.start_transaction
-        @abort_transaction = false
         yield
-        if record.test_mode || @abort_transaction
+        if task_record.test_mode
           @session.abort_transaction
         else
           @session.commit_transaction
@@ -75,7 +194,7 @@ module Hekenga
     end
 
     def task
-      @task ||= @migration.tasks[record.task_id]
+      @task ||= migration.tasks[task_idx]
     end
   end
 end
