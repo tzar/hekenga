@@ -62,7 +62,7 @@ module Hekenga
 
     def recover_document_task(task, idx)
       log = @migration.log(idx) rescue nil
-      if log.nil? || log.error || combined_stats(idx)['failed'] > 0
+      if document_task_failed?(log, idx)
         Hekenga.log "Recovering task##{idx}: #{task.description}"
         log.set_without_session({
           done: false,
@@ -97,6 +97,16 @@ module Hekenga
       end
     end
 
+    def document_task_failed?(log, idx)
+      return true if log.nil?
+      return true if log.error
+      stats = combined_stats(idx)
+      return false if stats.blank?
+      return true if stats['failed'] > 0
+      return true if stats['invalid'] > 0
+      false
+    end
+
     def recover_write_failures(task, log)
       klass = task.scope.klass
       log.failures.where(_type: "Hekenga::Failure::Write").each do |write_failure|
@@ -112,8 +122,11 @@ module Hekenga
     end
 
     def recover_simple_task(task, idx)
-      log = @migration.log(idx)
-      if log.error
+      log = @migration.log(idx) rescue nil
+      if log.nil?
+        Hekenga.log "Recovering task##{idx}: #{task.description}"
+        launch_task(task, idx)
+      elsif log.error
         Hekenga.log "Recovering task##{idx}: #{task.description}"
         # Strategy: clear logs + rerun
         log.failures.delete_all

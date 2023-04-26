@@ -213,7 +213,7 @@ describe "Hekenga#recover!" do
           when_invalid :continue
           up do |doc|
             if doc.num.zero?
-              puts "Setting doc.num(#{doc.num}) to #{doc.num + 1}"
+              puts "Setting doc.num(#{doc.num}) to 100"
               doc.num = 100
             else
               puts "Setting doc.num(#{doc.num}) to #{doc.num + 1}"
@@ -234,13 +234,16 @@ describe "Hekenga#recover!" do
         end
       end
     end
+
     before do
       migration.perform!
     end
+
     it "should perform both stages" do
       expect(Example.pluck(:string)).to eq(["blah"]*3)
       expect(Example.pluck(:num).sort).to eq([0,2,3])
     end
+
     it "should re-run stage1 but not stage2" do
       Example.where(num: 0).update_all(num: 3)
       expect(migration.recover!).to eq(true)
