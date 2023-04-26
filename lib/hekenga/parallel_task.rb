@@ -36,14 +36,6 @@ module Hekenga
       task_records.incomplete.none?
     end
 
-    def stats
-      {
-        total:   task_records.count,
-        pending: task_records.incomplete.count,
-        failed:  task_records.failed.count
-      }
-    end
-
     def check_for_completion!
       if complete?
         migration.log(task_idx).set_without_session(done: true, finished: Time.now)

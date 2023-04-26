@@ -1,3 +1,5 @@
+require 'hekenga/task_failed_error'
+
 module Hekenga
   class MasterProcess
     def initialize(migration)
@@ -9,6 +11,8 @@ module Hekenga
       @migration.tasks.each.with_index do |task, idx|
         launch_task(task, idx)
         report_while_active(task, idx)
+      rescue Hekenga::TaskFailedError
+        return
       ensure
         @active_thread = nil
       end
@@ -20,8 +24,8 @@ module Hekenga
         sleep 1
       end
       # Periodically report on thread progress
-      until @migration.log(idx).reload.done || !@active_thread.alive?
-        @active_thread.join if @active_thread.alive?
+      until @migration.log(idx).reload.done
+        @active_thread.join
         report_status(task, idx)
         sleep Hekenga.config.report_sleep
       end
@@ -62,6 +66,7 @@ module Hekenga
         combined_stats(idx)&.each do |stat, count|
           Hekenga.log " - #{stat.capitalize}: #{count}"
         end
+        # TODO - maybe raise TaskFailedError
       when Hekenga::SimpleTask
         report_simple_result(idx)
       end
@@ -85,7 +90,7 @@ module Hekenga
         @migration.log(idx).failures.each do |failure|
           Hekenga.log failure.message
         end
-        exit(1)
+        raise Hekenga::TaskFailedError
       else
         Hekenga.log "Task succeeded"
       end

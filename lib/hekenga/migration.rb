@@ -133,9 +133,11 @@ module Hekenga
         if records.length == (task.batch_size || batch_size)
           execute_document_task(task_idx, executor_key, records)
           records = []
+          return if log.cancel
         end
       end
       execute_document_task(task_idx, executor_key, records) if records.any?
+      return if log.cancel
       log_done!
     end
 

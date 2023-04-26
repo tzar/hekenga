@@ -4,14 +4,15 @@ module Hekenga
     attr_reader :context, :session
 
     def initialize(task_record, records: nil)
-      @task_record      = task_record
-      @records          = records
-      @migrated_records = []
-      @invalid_records  = []
-      @records_to_write = []
-      @filtered_records = []
-      @skipped_records  = []
-      @failed_records   = []
+      @task_record       = task_record
+      @records           = records
+      @migrated_records  = []
+      @invalid_records   = []
+      @records_to_write  = []
+      @filtered_records  = []
+      @skipped_records   = []
+      @failed_records    = []
+      @backed_up_records = {}
     end
 
     def run!
@@ -31,15 +32,23 @@ module Hekenga
 
     def check_for_completion!
       if migration_complete?
-        migration.log(task_idx).set_without_session(done: true, finished: Time.now)
+        migration.log(task_idx).set_without_session(
+          done: true,
+          finished: Time.now,
+          error: migration.task_records(task_idx).failed.any?
+        )
       end
+    end
+
+    def migration_cancelled?
+      migration.log(task_idx).cancel
     end
 
     private
 
     delegate :task_idx, to: :task_record
 
-    attr_reader :migrated_records, :records_to_write, :filtered_records, :invalid_records, :skipped_records, :failed_records
+    attr_reader :migrated_records, :records_to_write, :filtered_records, :invalid_records, :skipped_records, :failed_records, :backed_up_records
 
     def migration_complete?
       migration.task_records(task_idx).incomplete.none?
@@ -70,22 +79,30 @@ module Hekenga
 
     def filter_records
       records.each do |record|
-        # TODO - rescue + fail
         if task.filters.all? {|block| context.instance_exec(record, &block)}
           filtered_records << record
         else
           skipped_records << record
         end
+      rescue => _e
+        failed_records << record
       end
     end
 
     def run_migration
       filtered_records.each do |record|
+        backup_record(record)
         task.up!(@context, record)
         migrated_records << record
-      rescue => e
+      rescue => _e
         failed_records << record
       end
+    end
+
+    def backup_record(record)
+      return unless task.write_strategy == :delete_then_insert
+
+      backed_up_records[record._id] = record.as_document.deep_dup
     end
 
     def validate_records
@@ -111,6 +128,28 @@ module Hekenga
       else
         replace_records
       end
+    rescue Mongo::Error::BulkWriteError => e
+      # If we're in a transaction, we can retry; so just re-raise
+      raise if @session
+      # Otherwise, we need to log the failure
+      write_failure!(e)
+    end
+
+    def write_failure!(error)
+      log = migration.log(task_idx)
+      backups = records_to_write.map do |record|
+        failed_records << record
+        backed_up_records[record._id]
+      end.compact
+      @records_to_write = []
+      log.add_failure({
+        message:   error.to_s,
+        backtrace: error.backtrace,
+        documents: backups,
+        document_ids: records_to_write.map(&:_id),
+        task_record_id: task_record.id
+      }, Hekenga::Failure::Write)
+      log.set_without_session({error: true})
     end
 
     def delete_then_insert_records
@@ -152,13 +191,26 @@ module Hekenga
 
     def with_setup(&block)
       @context = Hekenga::Context.new(test_mode: task_record.test_mode)
-      task.setups&.each do |setup|
-        @context.instance_exec(&setup)
+      begin
+        task.setups&.each do |setup|
+          @context.instance_exec(&setup)
+        end
+      rescue => e
+        fail_and_cancel!(e)
+        return
       end
       yield
-    # TODO - rescue & cancel the migration with a failure
     ensure
       @context = nil
+    end
+
+    def fail_and_cancel!(error)
+      log = migration.log(task_idx)
+      log.add_failure({
+        message:   error.to_s,
+        backtrace: error.backtrace
+      }, Hekenga::Failure::Error)
+      log.set_without_session({cancel: true, error: true, done: true, finished: Time.now})
     end
 
     def with_transaction(&block)

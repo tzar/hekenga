@@ -17,9 +17,11 @@ module Hekenga
     field :written_ids, type: Array, default: []
 
     index(migration_key: 1, task_idx: 1, complete: 1)
+    index(migration_key: 1, task_idx: 1, 'stats.failed': 1)
 
     scope :incomplete, proc { where(complete: false) }
     scope :complete,   proc { where(complete: true) }
+    scope :failed,     proc { gt('stats.failed': 1) }
 
     before_create { self.id_count = ids.count }
 

@@ -16,6 +16,8 @@ describe "Tasks with write errors" do
 
         per_document "nothing" do
           scope Example.all
+          always_write!
+          write_strategy :delete_then_insert
           up do |doc|
             # NOOP
           end
@@ -24,9 +26,9 @@ describe "Tasks with write errors" do
     end
 
     before do
-      expect(migration).to receive(:write_result!) do
-        raise "Write error"
-      end
+      expect_any_instance_of(Hekenga::DocumentTaskExecutor).to(receive(:bulk_write) do |instance, operations, **kwargs|
+        raise Mongo::Error::BulkWriteError, {}
+      end)
     end
 
     it "should log correctly without crashing" do
@@ -35,7 +37,6 @@ describe "Tasks with write errors" do
       log = migration.log(0)
 
       expect(log.error).to eq(true)
-      expect(log.cancel).to eq(true)
       expect(log.failures.count).to eq(1)
 
       failure = log.failures.last
@@ -43,7 +44,6 @@ describe "Tasks with write errors" do
       expect(failure.pkey).to eq(migration.to_key)
       expect(failure.task_idx).to eq(0)
       expect(failure.documents).to eq(documents)
-      expect(failure.message).to eq("Write error")
     end
   end
 
@@ -56,6 +56,7 @@ describe "Tasks with write errors" do
 
         per_document "nothing" do
           scope Example.all
+          always_write!
           use_transaction!
           up do |doc|
             # NOOP
@@ -65,13 +66,13 @@ describe "Tasks with write errors" do
     end
 
     before do
-      expect(migration).to receive(:write_result!) do
-        raise "Write error"
-      end
+      expect_any_instance_of(Hekenga::DocumentTaskExecutor).to(receive(:bulk_write) do |instance, operations, **kwargs|
+        raise Mongo::Error::BulkWriteError, {}
+      end)
     end
 
     it "should crash so the job can retry" do
-      expect { migration.perform!  }.to raise_error(RuntimeError).with_message("Write error")
+      expect { migration.perform!  }.to raise_error(Mongo::Error::BulkWriteError)
       log = migration.log(0)
 
       expect(log.error).to eq(false)

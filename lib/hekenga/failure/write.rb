@@ -6,6 +6,7 @@ module Hekenga
       field :documents
       field :document_ids, type: Array
       field :batch_start
+      field :task_record_id
     end
   end
 end

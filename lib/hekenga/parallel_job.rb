@@ -11,6 +11,8 @@ module Hekenga
       return if record.complete?
 
       executor = Hekenga::DocumentTaskExecutor.new(record)
+      return if executor.migration_cancelled?
+
       executor.run!
       executor.check_for_completion!
     end
