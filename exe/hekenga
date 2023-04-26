@@ -37,12 +37,10 @@ class HekengaCLI < Thor
 
   desc "run_all!", "Run all migrations that have not yet run, in date order."
   def run_all!
-    bail_if_errors
     Hekenga.load_all!
     Hekenga.registry.sort_by {|x| x.stamp}.each do |migration|
       if Hekenga.status(migration) == :naught
         migration.perform!
-        bail_if_errors
       end
     end
   end
@@ -50,7 +48,6 @@ class HekengaCLI < Thor
   desc "run! PATH_OR_PKEY --test", "Run a migration (optionally in test mode)."
   option :test, default: false, type: :boolean
   def run!(path_or_pkey)
-    bail_if_errors
     migration = load_migration(path_or_pkey)
     migration.test_mode! if options[:test]
     migration.perform!
@@ -71,8 +68,6 @@ class HekengaCLI < Thor
       puts "  hekenga clear! #{path_or_pkey}"
     end
   end
-
-  # TODO - ability to connect to an active migration
 
   desc "cancel", "Cancel all active migrations."
   def cancel
@@ -131,13 +126,6 @@ class HekengaCLI < Thor
   end
 
   private
-
-  def bail_if_errors
-    if Hekenga.any_fatal?
-      puts "Refusing to run migrations while there is an existing cancelled migration."
-      exit(1)
-    end
-  end
 
   def load_migration(path_or_pkey)
     if File.exist?(File.expand_path(path_or_pkey))
