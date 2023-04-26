@@ -41,7 +41,7 @@ module Hekenga
       # Periodically report on thread progress
       until @migration.log(idx).reload.done
         @active_thread.join
-        #report_status(task, idx)
+        report_status(task, idx)
         sleep Hekenga.config.report_sleep
       end
       report_status(task, idx) if task.is_a?(Hekenga::DocumentTask)
@@ -147,7 +147,7 @@ module Hekenga
 
     def in_thread(&block)
       @active_thread = Thread.new(&block).tap do |t|
-        #t.report_on_exception = false
+        t.report_on_exception = false
         t.abort_on_exception = true
       end
     end
