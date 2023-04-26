@@ -24,7 +24,6 @@ describe "Hekenga#recover!" do
     end
     before do
       migration.perform!
-      allow(migration).to receive(:prompt).and_return(true)
     end
     it "should return false if it fails again" do
       expect(Example.pluck(:num).sort).to eq([0,1,2])
@@ -37,6 +36,7 @@ describe "Hekenga#recover!" do
       expect(Example.pluck(:num).sort).to eq([2,3,4])
     end
   end
+
   describe "document migrations" do
     let(:migration) do
       Hekenga.migration do
@@ -48,7 +48,9 @@ describe "Hekenga#recover!" do
           batch_size 1
           up do |doc|
             # General error
-            raise "fail" if doc.num == 1
+            if doc.num == 1
+              raise "fail"
+            end
             if doc.num == 2
               # Validation error
               doc.num = 100
@@ -60,20 +62,23 @@ describe "Hekenga#recover!" do
         end
       end
     end
+
     break_on_write = true
+
     before do
       # Write error
-      original_write = migration.method(:write_result!)
-      allow(migration).to receive(:write_result!) do |*args|
-        raise "fail" if break_on_write
-        original_write.call(*args)
+      original_write = Hekenga::DocumentTaskExecutor.instance_method(:bulk_write)
+      allow_any_instance_of(Hekenga::DocumentTaskExecutor).to receive(:bulk_write) do |instance, operations, **kwargs|
+        raise Mongo::Error::BulkWriteError, {} if break_on_write
+        original_write.bind_call(instance, operations, **kwargs)
       end
-      allow(migration).to receive(:prompt).and_return(true)
       migration.perform!
     end
+
     it "should return false if it fails again" do
       expect(migration.recover!).to eq(false)
     end
+
     it "should recover when fixed" do
       break_on_write = false
       Example.all.inc(num: 5)
@@ -81,6 +86,7 @@ describe "Hekenga#recover!" do
       expect(Example.count).to eq(3)
       expect(Example.pluck(:num).sort).to eq([10, 11, 12])
     end
+
     it "should recover when failed again then fixed" do
       break_on_write = false
       expect(migration.recover!).to eq(false)
@@ -90,6 +96,7 @@ describe "Hekenga#recover!" do
       expect(Example.pluck(:num).sort).to eq([10, 11, 12])
     end
   end
+
   describe "parallel migrations" do
     let(:migration) do
       Hekenga.migration do
@@ -114,15 +121,17 @@ describe "Hekenga#recover!" do
         end
       end
     end
+
     break_on_write = true
+
     before do
       # Write error
-      original_write = migration.method(:write_result!)
-      allow(migration).to receive(:write_result!) do |*args|
-        raise "fail" if break_on_write
-        original_write.call(*args)
+      original_write = Hekenga::DocumentTaskExecutor.instance_method(:bulk_write)
+      allow_any_instance_of(Hekenga::DocumentTaskExecutor).to receive(:bulk_write) do |instance, operations, **kwargs|
+        raise Mongo::Error::BulkWriteError, {} if break_on_write
+        original_write.bind_call(instance, operations, **kwargs)
       end
-      allow(migration).to receive(:prompt).and_return(true)
+
       perform_enqueued_jobs { migration.perform! }
     end
     it "should return false if it fails again" do
@@ -177,7 +186,6 @@ describe "Hekenga#recover!" do
       end
     end
     before do
-      allow(migration).to receive(:prompt).and_return(true)
       migration.perform!
     end
     it "should perform stage 2 when recovering from stage 1" do
@@ -227,7 +235,6 @@ describe "Hekenga#recover!" do
       end
     end
     before do
-      allow(migration).to receive(:prompt).and_return(true)
       migration.perform!
     end
     it "should perform both stages" do

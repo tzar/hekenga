@@ -1,5 +1,6 @@
 require 'hekenga/iterator'
 require 'hekenga/document_task_executor'
+require 'hekenga/task_splitter'
 
 module Hekenga
   class ParallelTask
@@ -15,13 +16,7 @@ module Hekenga
     def start!
       clear_task_records!
       @executor_key = BSON::ObjectId.new
-      Hekenga::Iterator.new(task.scope, size: 100_000).each do |id_block|
-        task_records = id_block.each_slice(batch_size).map do |id_slice|
-          generate_task_records!(id_slice)
-        end
-        write_task_records!(task_records)
-        queue_jobs!(task_records)
-      end
+      generate_for_scope(task.scope)
       check_for_completion!
     end
 
@@ -29,6 +24,8 @@ module Hekenga
       @executor_key = BSON::ObjectId.new
       task_records.set(executor_key: @executor_key)
       queue_jobs!(task_records.incomplete)
+      recover_failed_records!
+      generate_new_records!
       check_for_completion!
     end
 
@@ -43,6 +40,36 @@ module Hekenga
     end
 
     private
+
+    def generate_for_scope(scope)
+      Hekenga::Iterator.new(scope, size: 100_000).each do |id_block|
+        task_records = id_block.each_slice(batch_size).map do |id_slice|
+          generate_task_records!(id_slice)
+        end
+        write_task_records!(task_records)
+        queue_jobs!(task_records)
+      end
+    end
+
+    def generate_new_records!
+      last_record = task_records.desc(:_id).first
+      last_id = last_record&.ids&.last
+      scope = task.scope
+      scope = task.scope.and(_id: {'$gt': last_id}) if last_id
+      generate_for_scope(scope)
+    end
+
+    # Any records with a failure or a validation failure get moved into
+    # a new task record which is incomplete and gets a job queued
+    def recover_failed_records!
+      task_records.complete.no_timeout.each do |record|
+        Hekenga::TaskSplitter.new(record, @executor_key).call.tap do |new_record|
+          next if new_record.nil?
+
+          Hekenga::ParallelJob.perform_later(new_record.id.to_s, @executor_key.to_s)
+        end
+      end
+    end
 
     def batch_size
       task.batch_size || migration.batch_size

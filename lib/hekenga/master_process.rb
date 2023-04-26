@@ -1,4 +1,5 @@
 require 'hekenga/task_failed_error'
+require 'hekenga/task_splitter'
 
 module Hekenga
   class MasterProcess
@@ -12,10 +13,24 @@ module Hekenga
         launch_task(task, idx)
         report_while_active(task, idx)
       rescue Hekenga::TaskFailedError
-        return
+        return false
       ensure
         @active_thread = nil
       end
+      true
+    end
+
+    def recover!
+      Hekenga.log "Recovering migration #{@migration.to_key}: #{@migration.description}"
+      @migration.tasks.each.with_index do |task, idx|
+        recover_task(task, idx)
+        report_while_active(task, idx)
+      rescue Hekenga::TaskFailedError
+        return false
+      ensure
+        @active_thread = nil
+      end
+      true
     end
 
     def report_while_active(task, idx)
@@ -26,7 +41,7 @@ module Hekenga
       # Periodically report on thread progress
       until @migration.log(idx).reload.done
         @active_thread.join
-        report_status(task, idx)
+        #report_status(task, idx)
         sleep Hekenga.config.report_sleep
       end
       report_status(task, idx) if task.is_a?(Hekenga::DocumentTask)
@@ -36,11 +51,89 @@ module Hekenga
 
     private
 
+    def recover_task(task, idx)
+      case task
+      when Hekenga::DocumentTask
+        recover_document_task(task, idx)
+      when Hekenga::SimpleTask
+        recover_simple_task(task, idx)
+      end
+    end
+
+    def recover_document_task(task, idx)
+      log = @migration.log(idx) rescue nil
+      if log.nil? || log.error || combined_stats(idx)['failed'] > 0
+        Hekenga.log "Recovering task##{idx}: #{task.description}"
+        log.set_without_session({
+          done: false,
+          error: false,
+          cancel: false,
+          finished: nil,
+        })
+        recover_write_failures(task, log)
+        task_records = @migration.task_records(idx)
+        if task.parallel
+          Hekenga::ParallelTask.new(
+            migration: @migration,
+            task: task,
+            task_idx: idx,
+            test_mode: @migration.test_mode
+          ).resume!
+        else
+          # Strategy: clear failures; reset state
+          log.failures.delete_all
+          task_records.incomplete.delete_all
+          task_records.each do |record|
+            Hekenga::TaskSplitter.new(record, @executor_key).call&.destroy
+          end
+          @migration.active_idx = idx
+          in_thread do
+            @migration.start_document_task(task, idx, recover: true)
+          end
+        end
+
+      else
+        Hekenga.log "Skipping completed task##{idx}: #{task.description}"
+      end
+    end
+
+    def recover_write_failures(task, log)
+      klass = task.scope.klass
+      log.failures.where(_type: "Hekenga::Failure::Write").each do |write_failure|
+        next unless write_failure.documents.any?
+
+        existing = klass.in(_id: write_failure.documents.map {|doc| doc["_id"]}).pluck(:_id).to_set
+        to_write = write_failure.documents.reject {|doc| existing.include?(doc["_id"])}
+        next if to_write.empty?
+
+        Hekenga.log("Recovering #{to_write.length} write failures")
+        klass.collection.insert_many(to_write)
+      end.delete_all
+    end
+
+    def recover_simple_task(task, idx)
+      log = @migration.log(idx)
+      if log.error
+        Hekenga.log "Recovering task##{idx}: #{task.description}"
+        # Strategy: clear logs + rerun
+        log.failures.delete_all
+        log.destroy
+        @migration.reload_logs
+        launch_task(task, idx)
+      else
+        Hekenga.log "Skipping completed task##{idx}: #{task.description}"
+      end
+    end
+
     def launch_task(task, idx)
       Hekenga.log "Launching task##{idx}: #{task.description}"
-      @active_thread = Thread.new do
+      in_thread do
         @migration.perform_task!(idx)
-      end.tap do |t|
+      end
+    end
+
+    def in_thread(&block)
+      @active_thread = Thread.new(&block).tap do |t|
         #t.report_on_exception = false
         t.abort_on_exception = true
       end
@@ -65,8 +158,12 @@ module Hekenga
         Hekenga.log "Migration result:"
         combined_stats(idx)&.each do |stat, count|
           Hekenga.log " - #{stat.capitalize}: #{count}"
+        end&.tap do |stats|
+          if stats['failed'] > 0
+            Hekenga.log "There were failures while running the task. Stopping"
+            raise Hekenga::TaskFailedError
+          end
         end
-        # TODO - maybe raise TaskFailedError
       when Hekenga::SimpleTask
         report_simple_result(idx)
       end

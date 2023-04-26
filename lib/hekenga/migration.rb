@@ -8,7 +8,7 @@ require 'hekenga/document_task_executor'
 require 'hekenga/log'
 module Hekenga
   class Migration
-    attr_accessor :stamp, :description, :batch_size
+    attr_accessor :stamp, :description, :batch_size, :active_idx
     attr_reader :tasks, :session, :test_mode
 
     def initialize
@@ -90,6 +90,10 @@ module Hekenga
       end
     end
 
+    def recover!
+      Hekenga::MasterProcess.new(self).recover!
+    end
+
     # Internal perform methods
     def start_simple_task(task)
       create_log!
@@ -123,22 +127,36 @@ module Hekenga
       Hekenga::DocumentTaskRecord.where(migration_key: to_key, task_idx: task_idx)
     end
 
-    def start_document_task(task, task_idx)
+    def start_document_task(task, task_idx, recover: false)
       create_log!
       records = []
-      task_records(task_idx).delete_all
+      task_records(task_idx).delete_all unless recover
       executor_key = BSON::ObjectId.new
       task.scope.asc(:_id).no_timeout.each do |record|
         records.push(record)
-        if records.length == (task.batch_size || batch_size)
-          execute_document_task(task_idx, executor_key, records)
-          records = []
-          return if log.cancel
-        end
+        next unless records.length == (task.batch_size || batch_size)
+
+        records = filter_out_processed(task, task_idx, records) if recover
+        next unless records.length == (task.batch_size || batch_size)
+
+        execute_document_task(task_idx, executor_key, records)
+        records = []
+        return if log.cancel
       end
+      records = filter_out_processed(task, task_idx, records) if recover
       execute_document_task(task_idx, executor_key, records) if records.any?
       return if log.cancel
       log_done!
+    end
+
+    def filter_out_processed(task, task_idx, records)
+      return records if records.empty?
+
+      selector = task_records(task_idx).in(ids: records.map(&:id))
+      processed_ids = selector.pluck(:ids).flatten.to_set
+      records.reject do |record|
+        processed_ids.include?(record._id)
+      end
     end
 
     def execute_document_task(task_idx, executor_key, records)

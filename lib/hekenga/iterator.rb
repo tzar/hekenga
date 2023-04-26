@@ -16,7 +16,7 @@ module Hekenga
       base_scope = scope.asc(:_id).limit(size)
 
       loop do
-        ids = base_scope.gt(_id: current_id).pluck(:_id)
+        ids = base_scope.and(_id: {'$gt': current_id}).pluck(:_id)
         break if ids.empty?
         yield ids
         current_id = ids.sort.last
