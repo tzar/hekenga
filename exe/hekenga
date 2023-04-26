@@ -2,7 +2,7 @@
 
 require "bundler/setup"
 
-if File.exists?(File.expand_path("config/environment.rb"))
+if File.exist?(File.expand_path("config/environment.rb"))
   require File.expand_path("config/environment.rb")
 end
 
@@ -11,6 +11,10 @@ require "thor"
 require "pathname"
 
 class HekengaCLI < Thor
+  def self.exit_on_failure?
+    true
+  end
+
   desc "status", "Show which migrations have run and their status."
   def status
     Hekenga.load_all!
@@ -51,17 +55,23 @@ class HekengaCLI < Thor
     migration.test_mode! if options[:test]
     migration.perform!
     if options[:test]
-      if Hekenga::Failure.where(pkey: migration.to_key).any?
-        puts "Logs have been preserved for debugging. To reset migration state run:"
-        puts "  hekenga clear! #{path_or_pkey}"
-      else
-        puts "Migration test run completed successfully."
-        clear!(path_or_pkey)
-      end
+      puts "Logs have been preserved for debugging. To reset migration state run:"
+      puts "  hekenga clear! #{path_or_pkey}"
     end
   end
 
-  # TODO - ability to resume a migration
+  desc "recover! PATH_OR_PKEY", "Recover a migration"
+  option :test, default: false, type: :boolean
+  def recover!(path_or_pkey)
+    migration = load_migration(path_or_pkey)
+    migration.test_mode! if options[:test]
+    migration.recover!
+    if options[:test]
+      puts "Logs have been preserved for debugging. To reset migration state run:"
+      puts "  hekenga clear! #{path_or_pkey}"
+    end
+  end
+
   # TODO - ability to connect to an active migration
 
   desc "cancel", "Cancel all active migrations."
@@ -82,6 +92,7 @@ class HekengaCLI < Thor
     puts "Clearing #{migration.to_key}.."
     Hekenga::Log.where(pkey: migration.to_key).delete_all
     Hekenga::Failure.where(pkey: migration.to_key).delete_all
+    Hekenga::DocumentTaskRecord.where(migration_key: migration.to_key).delete_all
     puts "Done!"
   end
 
@@ -129,7 +140,7 @@ class HekengaCLI < Thor
   end
 
   def load_migration(path_or_pkey)
-    if File.exists?(File.expand_path(path_or_pkey))
+    if File.exist?(File.expand_path(path_or_pkey))
       require File.expand_path(path_or_pkey)
       migration = Hekenga.registry.last
     else

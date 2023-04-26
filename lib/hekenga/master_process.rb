@@ -33,6 +33,8 @@ module Hekenga
       true
     end
 
+    private
+
     def report_while_active(task, idx)
       # Wait for the log to be generated
       until (@migration.log(idx) rescue nil)
@@ -48,8 +50,6 @@ module Hekenga
       report_result(task, idx)
       Hekenga.log "Completed"
     end
-
-    private
 
     def recover_task(task, idx)
       case task
