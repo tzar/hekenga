@@ -47,7 +47,9 @@ class HekengaCLI < Thor
 
   desc "run! PATH_OR_PKEY --test", "Run a migration (optionally in test mode)."
   option :test, default: false, type: :boolean
+  option :clear, default: false, type: :boolean
   def run!(path_or_pkey)
+    clear!(path_or_pkey) if options[:clear]
     migration = load_migration(path_or_pkey)
     migration.test_mode! if options[:test]
     migration.perform!

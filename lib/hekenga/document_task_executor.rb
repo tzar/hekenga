@@ -211,6 +211,18 @@ module Hekenga
         backtrace: error.backtrace
       }, Hekenga::Failure::Error)
       log.set_without_session({cancel: true, error: true, done: true, finished: Time.now})
+      task_record.update_attributes(
+        complete: true,
+        finished: Time.now,
+        failed_ids: task_record.ids,
+        invalid_ids: [],
+        written_ids: [],
+        stats: {
+          failed: task_record.ids.length,
+          invalid: 0,
+          written: 0,
+        }
+      )
     end
 
     def with_transaction(&block)

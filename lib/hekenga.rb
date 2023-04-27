@@ -8,6 +8,10 @@ require "hekenga/virtual_method"
 require "hekenga/scaffold"
 
 module Hekenga
+  @@load_all_mutex = Mutex.new
+  @@registry_mutex = Mutex.new
+  @@registry       = []
+
   class << self
     def configure
       yield(config)
@@ -19,14 +23,19 @@ module Hekenga
 
     def load_all!
       return if @loaded
-      Dir.glob(File.join(config.abs_dir, "*.rb")).each do |path|
-        require path
-      end.tap { @loaded = true }
+
+      @@load_all_mutex.synchronize do
+        Dir.glob(File.join(config.abs_dir, "*.rb")).each do |path|
+          require path
+        end
+
+        @loaded = true
+      end
     end
 
     def migration(&block)
       Hekenga::DSL::Migration.new(&block).object.tap do |obj|
-        self.registry.push(obj)
+        @@registry_mutex.synchronize { registry.push(obj) }
       end
     end
 
@@ -38,11 +47,11 @@ module Hekenga
     end
 
     def registry
-      @registry || reset_registry
+      @@registry
     end
 
     def reset_registry
-      @registry = []
+      @@registry_mutex.synchronize { @@registry = [] }
     end
 
     def status(migration)
