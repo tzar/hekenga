@@ -28,33 +28,38 @@ module Hekenga
         created #{@migration.timestamp.sub("T", " ").inspect}
 
         ## Optional
-        # batch_size 10
+        #batch_size 25
 
         ## Simple tasks
-        # task "task description" do
-        #   up do
-        #   end
-        # end
+        #task "task description" do
+        #  up do
+        #  end
+        #end
 
         ## Per document tasks
-        # per_document "task description" do
-        #   ## Required
-        #   scope MyModel.all
+        #per_document "task description" do
+        #  ## Required
+        #  scope MyModel.all
         #
-        #   ## Optional config
-        #   # parallel!
-        #   # timeless!
-        #   # skip_prepare!
-        #   # when_invalid :prompt # :prompt, :cancel, :stop, :continue
-        #   #
-        #   # setup do
-        #   # end
-        #   # filter do
-        #   # end
+        #  ## Optional config
+        #  #parallel!
+        #  #timeless!
+        #  #always_write!
+        #  #skip_prepare!
+        #  #batch_size 25
+        #  #write_strategy :update # :delete_then_insert
         #
-        #   up do |doc|
-        #   end
-        # end
+        #  # Called once per batch, instance variables will be accessible
+        #  # in the filter & up blocks
+        #  #setup do
+        #  #end
+        #
+        #  #filter do |doc|
+        #  #end
+        #
+        #  up do |doc|
+        #  end
+        #end
       end
       EOF
     end

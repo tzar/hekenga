@@ -6,6 +6,7 @@ describe "Tasks with apply errors" do
       Example.create! string: "idx-#{idx}", num: idx
     end
   end
+
   describe "simple task with error on up" do
     let(:migration) do
       Hekenga.migration do
@@ -35,6 +36,7 @@ describe "Tasks with apply errors" do
       expect(failure.backtrace).to_not eq(nil)
     end
   end
+
   describe "doc task with error on up" do
     let(:migration) do
       Hekenga.migration do
@@ -53,21 +55,9 @@ describe "Tasks with apply errors" do
 
     it "should log correctly without crashing" do
       expect { migration.perform!  }.to_not raise_error
-      log = migration.log(0)
-
-      expect(log.error).to eq(true)
-      expect(log.cancel).to eq(true)
-      expect(log.failures.count).to eq(1)
-
-      failure = log.failures.last
-      doc     = Example.find_by(num: 2)
-      expect(failure.class).to eq(Hekenga::Failure::Error)
-      expect(failure.pkey).to eq(migration.to_key)
-      expect(failure.task_idx).to eq(0)
-      expect(failure.message).to eq("Problem")
-      expect(failure.backtrace).to_not eq(nil)
-      expect(failure.document).to eq(doc.as_document)
-      expect(failure.batch_start).to eq(doc.id)
+      records = migration.task_records(0)
+      doc = Example.find_by(num: 2)
+      expect(records.where(ids: doc.id).first.failed_ids).to include(doc.id)
     end
   end
 end

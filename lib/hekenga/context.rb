@@ -1,14 +1,15 @@
 module Hekenga
   class Context
-    def initialize(test_run)
-      @__test_run = test_run
+    def initialize(test_mode: false)
+      @__test_mode = test_mode
+    end
+
+    def actual?
+      !@__test_mode
     end
 
     def test?
-      !!@__test_run
-    end
-    def actual?
-      !@__test_run
+      !actual?
     end
   end
 end

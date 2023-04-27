@@ -2,7 +2,7 @@
 
 require "bundler/setup"
 
-if File.exists?(File.expand_path("config/environment.rb"))
+if File.exist?(File.expand_path("config/environment.rb"))
   require File.expand_path("config/environment.rb")
 end
 
@@ -11,6 +11,10 @@ require "thor"
 require "pathname"
 
 class HekengaCLI < Thor
+  def self.exit_on_failure?
+    true
+  end
+
   desc "status", "Show which migrations have run and their status."
   def status
     Hekenga.load_all!
@@ -33,31 +37,37 @@ class HekengaCLI < Thor
 
   desc "run_all!", "Run all migrations that have not yet run, in date order."
   def run_all!
-    bail_if_errors
     Hekenga.load_all!
     Hekenga.registry.sort_by {|x| x.stamp}.each do |migration|
       if Hekenga.status(migration) == :naught
         migration.perform!
-        bail_if_errors
       end
     end
   end
 
   desc "run! PATH_OR_PKEY --test", "Run a migration (optionally in test mode)."
   option :test, default: false, type: :boolean
+  option :clear, default: false, type: :boolean
   def run!(path_or_pkey)
-    bail_if_errors
+    clear!(path_or_pkey) if options[:clear]
     migration = load_migration(path_or_pkey)
     migration.test_mode! if options[:test]
     migration.perform!
     if options[:test]
-      if Hekenga::Failure.where(pkey: migration.to_key).any?
-        puts "Logs have been preserved for debugging. To reset migration state run:"
-        puts "  hekenga clear! #{path_or_pkey}"
-      else
-        puts "Migration test run completed successfully."
-        clear!(path_or_pkey)
-      end
+      puts "Logs have been preserved for debugging. To reset migration state run:"
+      puts "  hekenga clear! #{path_or_pkey}"
+    end
+  end
+
+  desc "recover! PATH_OR_PKEY", "Recover a migration"
+  option :test, default: false, type: :boolean
+  def recover!(path_or_pkey)
+    migration = load_migration(path_or_pkey)
+    migration.test_mode! if options[:test]
+    migration.recover!
+    if options[:test]
+      puts "Logs have been preserved for debugging. To reset migration state run:"
+      puts "  hekenga clear! #{path_or_pkey}"
     end
   end
 
@@ -79,22 +89,8 @@ class HekengaCLI < Thor
     puts "Clearing #{migration.to_key}.."
     Hekenga::Log.where(pkey: migration.to_key).delete_all
     Hekenga::Failure.where(pkey: migration.to_key).delete_all
+    Hekenga::DocumentTaskRecord.where(migration_key: migration.to_key).delete_all
     puts "Done!"
-  end
-
-  desc "rollback", "Rollback a migration."
-  def rollback
-    todo "rollback"
-  end
-
-  desc "recover", "Attempt to resume a failed migration."
-  def recover
-    todo "recover"
-  end
-
-  desc "errors", "Print the errors associated with a failed migration."
-  def errors
-    todo "errors"
   end
 
   desc "skip PATH_OR_PKEY", "Skip a migration so that it won't run."
@@ -114,7 +110,7 @@ class HekengaCLI < Thor
   end
 
   desc "generate <description> --edit", "Generate a migration scaffold (and optionally edit in your editor)."
-  option :edit
+  option :edit, type: :boolean
   def generate(*description)
     description = description.join(" ")
     scaffold = Hekenga::Scaffold.new(description)
@@ -130,20 +126,11 @@ class HekengaCLI < Thor
       exec "$EDITOR #{path}"
     end
   end
+
   private
 
-  def todo(op)
-    puts "#{op.capitalize} has not yet been implemented."
-    exit(99)
-  end
-  def bail_if_errors
-    if Hekenga.any_fatal?
-      puts "Refusing to run migrations while there is an existing cancelled migration."
-      exit(1)
-    end
-  end
   def load_migration(path_or_pkey)
-    if File.exists?(File.expand_path(path_or_pkey))
+    if File.exist?(File.expand_path(path_or_pkey))
       require File.expand_path(path_or_pkey)
       migration = Hekenga.registry.last
     else

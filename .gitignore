@@ -7,4 +7,6 @@
 /pkg/
 /spec/reports/
 /tmp/
+*.gem
+todo.txt
 .versions.conf

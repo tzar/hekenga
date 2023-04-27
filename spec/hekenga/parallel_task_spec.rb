@@ -48,15 +48,25 @@ describe "Hekenga::DocumentTask (parallel)", type: :job do
       end
       expect(Example.asc(:_id).pluck(:num)).to eq([0, 1, 3])
     end
+    context "in transaction mode" do
+      before { migration.tasks[0].use_transaction = true }
+
+      it "should carry out the migration" do
+        perform_enqueued_jobs do
+          migration.perform!
+        end
+        expect(Example.asc(:_id).pluck(:num)).to eq([0, 1, 3])
+      end
+    end
     it "should log correctly" do
       perform_enqueued_jobs do
         migration.perform!
       end
+      process = Hekenga::MasterProcess.new(migration)
+      stats = process.send(:combined_stats, 0)
       log = Hekenga::Log.last
-      expect(log.total).to eq(2)
-      expect(log.processed).to eq(2)
       expect(log.done).to eq(true)
-      expect(log.skipped).to eq(1)
+      expect(stats).to eq("failed" => 0, "invalid" => 0, "written" => 1)
     end
     context "test mode" do
       it "should not persist" do
