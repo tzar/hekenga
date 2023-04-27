@@ -2,11 +2,17 @@ require 'spec_helper'
 
 describe "Hekenga#recover!" do
   include ActiveJob::TestHelper
+  before do
+    clear_enqueued_jobs
+    clear_performed_jobs
+  end
+
   before(:each) do
     3.times.each do |idx|
       Example.create! string: "idx-#{idx}", num: idx
     end
   end
+
   describe "simple migrations" do
     let(:migration) do
       Hekenga.migration do

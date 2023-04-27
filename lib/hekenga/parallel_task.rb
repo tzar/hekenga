@@ -24,8 +24,8 @@ module Hekenga
       @executor_key = BSON::ObjectId.new
       task_records.set(executor_key: @executor_key)
       queue_jobs!(task_records.incomplete)
-      recover_failed_records!
       generate_new_records!
+      recover_failed_records!
       check_for_completion!
     end
 
