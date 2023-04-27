@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.0.1
+
+- Generate migrations without : in the filename for windows
+
 ## v1.0.0
 
 - `hekenga run!` now has a `--clear` option to clear the migration prior to running it
