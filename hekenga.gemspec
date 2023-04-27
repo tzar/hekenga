@@ -8,6 +8,7 @@ Gem::Specification.new do |spec|
   spec.version       = Hekenga::VERSION
   spec.authors       = ["Tapio Saarinen"]
   spec.email         = ["admin@bitlong.org"]
+  spec.licenses      = ["MIT"]
 
   spec.summary       = %q{Sophisticated migration framework for mongoid, with the ability to parallelise via ActiveJob.}
   spec.homepage      = "https://github.com/tzar/hekenga"
@@ -22,7 +23,7 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "bundler", "~> 2.4.6"
   spec.add_development_dependency "rake", ">= 12.3.3"
   spec.add_development_dependency "rspec", "~> 3.0"
-  spec.add_development_dependency "database_cleaner-mongoid"
+  spec.add_development_dependency "database_cleaner-mongoid", "~> 2.0"
   spec.add_development_dependency "pry"
   spec.add_development_dependency "pry-byebug"
 
