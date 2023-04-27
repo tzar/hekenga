@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.0.2
+
+- Fix `skip_prepare!` being ignored
+
 ## v1.0.1
 
 - Generate migrations without : in the filename for windows
