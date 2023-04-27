@@ -34,6 +34,7 @@ describe Hekenga::DocumentTask do
       migration.perform!
       expect(Example.asc(:_id).pluck(:num)).to eq([0, 1, 3])
     end
+
     it "should log correctly" do
       migration.perform!
       process = Hekenga::MasterProcess.new(migration)
@@ -42,6 +43,7 @@ describe Hekenga::DocumentTask do
       expect(log.done).to eq(true)
       expect(stats).to eq("failed" => 0, "invalid" => 0, "written" => 1)
     end
+
     context "test mode" do
       it "should not persist" do
         migration.test_mode!
@@ -84,6 +86,35 @@ describe Hekenga::DocumentTask do
       migration.perform!
     end
   end
+
+  describe "callbacks" do
+    let(:migration) do
+      Hekenga.migration do
+        description "callbacks"
+        created "2023-04-27 15:47"
+
+        per_document "Demo" do
+          scope Example.all
+          up do |doc|
+            doc.num += 1
+          end
+        end
+      end
+    end
+
+    it "runs callbacks" do
+      migration.perform!
+
+      expect(Example.all.pluck(:num_copy)).to eq(Example.all.pluck(:num))
+    end
+
+    it "doesn't run callbacks when skip_prepare" do
+      migration.tasks[0].skip_prepare = true
+      migration.perform!
+      expect(Example.all.pluck(:num_copy)).to_not eq(Example.all.pluck(:num))
+    end
+  end
+
 
   describe "transactions" do
     let(:migration) do

@@ -120,7 +120,9 @@ module Hekenga
       return if records_to_write.empty?
       return if task_record.test_mode
 
-      records_to_write.each {|record| record.send(:prepare_update) {}}
+      unless task.skip_prepare
+        records_to_write.each {|record| record.send(:prepare_update) {}}
+      end
 
       case task.write_strategy
       when :delete_then_insert
