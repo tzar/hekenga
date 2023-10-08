@@ -1,5 +1,6 @@
 class Example
   include Mongoid::Document
+  include Mongoid::Timestamps
 
   field :string, default: "blah"
   field :num,    default: 42

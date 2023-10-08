@@ -121,7 +121,13 @@ module Hekenga
       return if task_record.test_mode
 
       unless task.skip_prepare
-        records_to_write.each {|record| record.send(:prepare_update) {}}
+        records_to_write.each do |record|
+          if task.timeless
+            record.timeless
+          else
+            record
+          end.send(:prepare_update) {}
+        end
       end
 
       case task.write_strategy

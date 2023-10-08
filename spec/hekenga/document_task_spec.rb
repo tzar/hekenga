@@ -51,6 +51,15 @@ describe Hekenga::DocumentTask do
         expect(Example.asc(:_id).pluck(:num)).to eq([0, 1, 2])
       end
     end
+
+    context "timeless mode" do
+      it "should not update timestamps" do
+        expect do
+          migration.tasks[0].timeless = true
+          migration.perform!
+        end.to_not(change { Example.asc(:_id).pluck(:updated_at) })
+      end
+    end
   end
 
   describe "skipping unchanged records" do

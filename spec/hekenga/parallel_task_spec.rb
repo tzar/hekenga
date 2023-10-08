@@ -77,6 +77,17 @@ describe "Hekenga::DocumentTask (parallel)", type: :job do
         expect(Example.asc(:_id).pluck(:num)).to eq([0, 1, 2])
       end
     end
+
+    context "timeless mode" do
+      it "should not update timestamps" do
+        expect do
+          perform_enqueued_jobs do
+            migration.tasks[0].timeless = true
+            migration.perform!
+          end
+        end.to_not(change { Example.asc(:_id).pluck(:updated_at) })
+      end
+    end
   end
 
   after do
