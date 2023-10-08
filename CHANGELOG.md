@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.0.3
+
+- Fix `timeless!` being ignored
+
 ## v1.0.2
 
 - Fix `skip_prepare!` being ignored
