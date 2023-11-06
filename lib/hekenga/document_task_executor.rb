@@ -13,6 +13,7 @@ module Hekenga
       @skipped_records   = []
       @failed_records    = []
       @backed_up_records = {}
+      @seen_errors       = []
     end
 
     def run!
@@ -48,7 +49,9 @@ module Hekenga
 
     delegate :task_idx, to: :task_record
 
-    attr_reader :migrated_records, :records_to_write, :filtered_records, :invalid_records, :skipped_records, :failed_records, :backed_up_records
+    attr_reader :migrated_records, :records_to_write, :filtered_records,
+      :invalid_records, :skipped_records, :failed_records, :backed_up_records,
+      :seen_errors
 
     def migration_complete?
       migration.task_records(task_idx).incomplete.none?
@@ -84,7 +87,8 @@ module Hekenga
         else
           skipped_records << record
         end
-      rescue => _e
+      rescue => e
+        print_error(e)
         failed_records << record
       end
     end
@@ -94,7 +98,8 @@ module Hekenga
         backup_record(record)
         task.up!(@context, record)
         migrated_records << record
-      rescue => _e
+      rescue => e
+        print_error(e)
         failed_records << record
       end
     end
@@ -267,6 +272,14 @@ module Hekenga
 
     def task
       @task ||= migration.tasks[task_idx]
+    end
+
+    def print_error(error)
+      message = [error.message, error.backtrace].join("\n")
+      return if seen_errors.include?(message.hash)
+
+      seen_errors << message.hash
+      Hekenga.log(message)
     end
   end
 end

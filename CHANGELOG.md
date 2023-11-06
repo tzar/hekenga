@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.0.4
+
+- Log errors during document tasks to stdout
+
 ## v1.0.3
 
 - Fix `timeless!` being ignored

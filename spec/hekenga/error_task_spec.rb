@@ -53,8 +53,37 @@ describe "Tasks with apply errors" do
       end
     end
 
-    it "should log correctly without crashing" do
-      expect { migration.perform!  }.to_not raise_error
+    it "should log up failures correctly without crashing" do
+      expect do
+        expect { migration.perform! }.to_not raise_error
+      end.to output(/Problem/).to_stdout
+      records = migration.task_records(0)
+      doc = Example.find_by(num: 2)
+      expect(records.where(ids: doc.id).first.failed_ids).to include(doc.id)
+    end
+  end
+
+  describe "doc task with error on filter" do
+    let(:migration) do
+      Hekenga.migration do
+        description "Broken"
+        created "2017-03-31 12:00"
+        batch_size 1
+
+        per_document "break" do
+          scope Example.all
+          filter do |doc|
+            raise "Problem" if doc.num == 2
+          end
+          up {}
+        end
+      end
+    end
+
+    it "should log up failures correctly without crashing" do
+      expect do
+        expect { migration.perform! }.to_not raise_error
+      end.to output(/Problem/).to_stdout
       records = migration.task_records(0)
       doc = Example.find_by(num: 2)
       expect(records.where(ids: doc.id).first.failed_ids).to include(doc.id)
