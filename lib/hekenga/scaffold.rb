@@ -50,8 +50,8 @@ module Hekenga
         #  #write_strategy :update # :delete_then_insert
         #
         #  # Called once per batch, instance variables will be accessible
-        #  # in the filter & up blocks
-        #  #setup do
+        #  # in the filter, up and after blocks
+        #  #setup do |docs|
         #  #end
         #
         #  #filter do |doc|
@@ -59,6 +59,10 @@ module Hekenga
         #
         #  up do |doc|
         #  end
+        #
+        #  # Called once per batch passing successfully written records
+        #  #after do |docs|
+        #  #end
         #end
       end
       EOF

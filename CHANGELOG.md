@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.0
+
+- `setup` is now passed the current batch of documents so it can be used to
+    preload effectively
+- `after` has been added - this is a block of code that will be passed the
+    current batch of written documents after a write has been completed. If
+    no documents were written, this block will not be called
+
 ## v1.0.4
 
 - Log errors during document tasks to stdout

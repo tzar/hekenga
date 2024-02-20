@@ -1,7 +1,7 @@
 require 'hekenga/irreversible'
 module Hekenga
   class DocumentTask
-    attr_reader :ups, :downs, :setups, :filters
+    attr_reader :ups, :downs, :setups, :filters, :after_callbacks
     attr_accessor :parallel, :scope, :timeless, :batch_size
     attr_accessor :description, :invalid_strategy, :skip_prepare, :write_strategy
     attr_accessor :always_write, :use_transaction
@@ -11,6 +11,7 @@ module Hekenga
       @downs            = []
       @setups           = []
       @filters          = []
+      @after_callbacks  = []
       @invalid_strategy = :continue
       @write_strategy   = :update
       @skip_prepare     = false

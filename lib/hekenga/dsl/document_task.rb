@@ -67,6 +67,10 @@ module Hekenga
       def down(&block)
         @object.downs.push block
       end
+
+      def after(&block)
+        @object.after_callbacks.push block
+      end
     end
   end
 end

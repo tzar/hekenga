@@ -28,6 +28,7 @@ module Hekenga
         # In test mode, the transaction will be aborted - so we need to write
         # the result outside of the run! block
         write_result if task_record.test_mode
+        after_callback
       end
     end
 
@@ -206,7 +207,7 @@ module Hekenga
       @context = Hekenga::Context.new(test_mode: task_record.test_mode)
       begin
         task.setups&.each do |setup|
-          @context.instance_exec(&setup)
+          @context.instance_exec(records, &setup)
         end
       rescue => e
         fail_and_cancel!(e)
@@ -215,6 +216,18 @@ module Hekenga
       yield
     ensure
       @context = nil
+    end
+
+    def after_callback
+      return if records_to_write.empty?
+
+      task.after_callbacks&.each do |callback|
+        @context.instance_exec(records_to_write, &callback)
+      end
+    rescue => e
+      # Error is just printed for now as we've already migrated, don't
+      # want to overwrite the task record state
+      print_error(e)
     end
 
     def fail_and_cancel!(error)

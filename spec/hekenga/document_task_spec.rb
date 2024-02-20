@@ -96,6 +96,155 @@ describe Hekenga::DocumentTask do
     end
   end
 
+  describe "setup block accepting docs" do
+    let(:migration) do
+      Hekenga.migration do
+        description "Setup block with docs"
+        created "2023-04-17 15:11"
+
+        per_document "Demo" do
+          scope Example.all
+
+          setup do |docs|
+            @increment = docs.length
+          end
+
+          up do |doc|
+            doc.num = @increment
+          end
+        end
+      end
+    end
+
+    it "works" do
+      migration.perform!
+      expect(Example.pluck(:num)).to eq([3, 3, 3])
+    end
+  end
+
+  describe "after callback" do
+    module SomeReporter; end
+
+    context "simple case" do
+      let(:migration) do
+        Hekenga.migration do
+          description "after block with docs"
+          created "2023-04-17 15:11"
+
+          per_document "Demo" do
+            scope Example.all
+
+            up do |doc|
+              doc.num += 1
+            end
+
+            after do |docs|
+              SomeReporter.report(docs.map(&:num).sum)
+            end
+          end
+        end
+      end
+
+      it "works" do
+        allow(SomeReporter).to receive(:report)
+        migration.perform!
+        expect(SomeReporter).to have_received(:report).with(6) # 1+2+3
+      end
+    end
+
+    context "all filtered case" do
+      let(:migration) do
+        Hekenga.migration do
+          description "after block with docs"
+          created "2023-04-17 15:11"
+
+          per_document "Demo" do
+            scope Example.all
+
+            filter do |doc|
+              false
+            end
+
+            up do |doc|
+              doc.num += 1
+            end
+
+            after do |docs|
+              SomeReporter.report(docs.map(&:num).sum)
+            end
+          end
+        end
+      end
+
+      it "doesn't call if there are no docs" do
+        allow(SomeReporter).to receive(:report)
+        migration.perform!
+        expect(SomeReporter).to_not have_received(:report)
+      end
+    end
+
+    context "some filtered case" do
+      let(:migration) do
+        Hekenga.migration do
+          description "after block with docs"
+          created "2023-04-17 15:11"
+
+          per_document "Demo" do
+            scope Example.all
+
+            filter do |doc|
+              doc.num == 1
+            end
+
+            up do |doc|
+              doc.num += 1
+            end
+
+            after do |docs|
+              SomeReporter.report(docs.map(&:num).sum)
+            end
+          end
+        end
+      end
+
+      it "only calls with actually written docs" do
+        allow(SomeReporter).to receive(:report)
+        migration.perform!
+        expect(SomeReporter).to have_received(:report).with(2)
+      end
+    end
+
+    context "bad code in after block" do
+      let(:migration) do
+        Hekenga.migration do
+          description "after block with docs"
+          created "2023-04-17 15:11"
+
+          per_document "Demo" do
+            scope Example.all
+
+            filter do |doc|
+              doc.num == 1
+            end
+
+            up do |doc|
+              doc.num += 1
+            end
+
+            after do |docs|
+              SomeTypo.report(docs.map(&:num).sum)
+            end
+          end
+        end
+      end
+
+      it "only calls with actually written docs" do
+        expect_any_instance_of(Hekenga::DocumentTaskExecutor).to receive(:print_error).once
+        migration.perform!
+      end
+    end
+  end
+
   describe "callbacks" do
     let(:migration) do
       Hekenga.migration do
