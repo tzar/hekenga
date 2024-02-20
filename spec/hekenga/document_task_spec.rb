@@ -223,10 +223,6 @@ describe Hekenga::DocumentTask do
           per_document "Demo" do
             scope Example.all
 
-            filter do |doc|
-              doc.num == 1
-            end
-
             up do |doc|
               doc.num += 1
             end
@@ -238,9 +234,10 @@ describe Hekenga::DocumentTask do
         end
       end
 
-      it "only calls with actually written docs" do
+      it "prints errors but finishes the migration" do
         expect_any_instance_of(Hekenga::DocumentTaskExecutor).to receive(:print_error).once
         migration.perform!
+        expect(Example.pluck(:num).sort).to eq([1, 2, 3])
       end
     end
   end
