@@ -3,9 +3,6 @@
 An attempt at a migration framework for MongoDB that supports parallel document
 processing via ActiveJob, chained jobs and error recovery.
 
-**Note that this gem is currently in pre-alpha - assume most things have a high
-chance of being broken.**
-
 ## Installation
 
 Add this line to your application's Gemfile:
