@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.0.0
+
+- `Hekenga::Iterator` has been replaced by `Hekenga::IdIterator`. If any
+    selector or sort is set on a document task migration scope, it no longer forces an
+    ascending ID sort. This should help to prevent index misses, though there is a
+    tradeoff that documents being concurrently updated may be skipped or
+    processed multiple times. Hekenga tries to guard against processing multiple
+    times. Manually specifying an `asc(:_id)` on your scope will continue to
+    process documents in ID order.
+- Document tasks now support a new option, `cursor_timeout`. This is the maximum
+    time a document task's `scope` can be iterated and queue jobs within. The
+    default is one day.
+
 ## v1.1.0
 
 - `setup` is now passed the current batch of documents so it can be used to
