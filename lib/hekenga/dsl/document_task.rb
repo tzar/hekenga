@@ -28,6 +28,10 @@ module Hekenga
         @object.write_strategy = strategy
       end
 
+      def cursor_timeout(timeout)
+        @object.cursor_timeout = timeout.to_i
+      end
+
       def scope(scope)
         @object.scope = scope
       end

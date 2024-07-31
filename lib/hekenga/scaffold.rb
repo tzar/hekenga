@@ -48,6 +48,7 @@ module Hekenga
         #  #skip_prepare!
         #  #batch_size 25
         #  #write_strategy :update # :delete_then_insert
+        #  #cursor_timout 86_400 # max allowed time for the cursor to survive, in seconds
         #
         #  # Called once per batch, instance variables will be accessible
         #  # in the filter, up and after blocks

@@ -1,4 +1,4 @@
-require 'hekenga/iterator'
+require 'hekenga/id_iterator'
 require 'hekenga/document_task_executor'
 require 'hekenga/task_splitter'
 
@@ -15,13 +15,13 @@ module Hekenga
 
     def start!
       clear_task_records!
-      @executor_key = BSON::ObjectId.new
+      regenerate_executor_key
       generate_for_scope(task.scope)
       check_for_completion!
     end
 
     def resume!
-      @executor_key = BSON::ObjectId.new
+      regenerate_executor_key
       task_records.set(executor_key: @executor_key)
       queue_jobs!(task_records.incomplete)
       generate_new_records!
@@ -41,13 +41,40 @@ module Hekenga
 
     private
 
+    def regenerate_executor_key
+      @executor_key = BSON::ObjectId.new
+    end
+
     def generate_for_scope(scope)
-      Hekenga::Iterator.new(scope, size: 100_000).each do |id_block|
-        task_records = id_block.each_slice(batch_size).map do |id_slice|
-          generate_task_records!(id_slice)
-        end
+      Hekenga::IdIterator.new(
+        scope: scope,
+        cursor_timeout: task.cursor_timeout
+        # Batch Batches of IDs
+      ).each_slice(batch_size).each_slice(enqueue_size) do |id_block|
+        sanitize_id_block!(id_block)
+        task_records = id_block.reject(&:empty?).map(&method(:generate_task_record!))
         write_task_records!(task_records)
         queue_jobs!(task_records)
+      end
+    end
+
+    def enqueue_size
+      500 # task records written + enqueued at a time
+    end
+
+    def sanitize_id_block!(id_block)
+      return if task.scope.options.blank? && task.scope.selector.blank?
+
+      # Custom ordering on cursor with parallel updates may result in the same
+      # ID getting yielded into the migration multiple times. Detect this +
+      # remove
+      doubleups = task_records.in(ids: id_block.flatten).pluck(:ids).flatten.to_set
+      return if doubleups.empty?
+
+      id_block.each do |id_slice|
+        id_slice.reject! do |id|
+          doubleups.include?(id)
+        end
       end
     end
 
@@ -83,7 +110,7 @@ module Hekenga
       migration.task_records(task_idx)
     end
 
-    def generate_task_records!(id_slice)
+    def generate_task_record!(id_slice)
       Hekenga::DocumentTaskRecord.new(
         migration_key: migration.to_key,
         task_idx:      task_idx,

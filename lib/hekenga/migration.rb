@@ -2,6 +2,7 @@ require 'hekenga/invalid'
 require 'hekenga/context'
 require 'hekenga/parallel_job'
 require 'hekenga/parallel_task'
+require 'hekenga/mongoid_iterator'
 require 'hekenga/master_process'
 require 'hekenga/document_task_record'
 require 'hekenga/document_task_executor'
@@ -132,18 +133,18 @@ module Hekenga
       records = []
       task_records(task_idx).delete_all unless recover
       executor_key = BSON::ObjectId.new
-      task.scope.asc(:_id).no_timeout.each do |record|
+      Hekenga::MongoidIterator.new(scope: task.scope, cursor_timeout: task.cursor_timeout).each do |record|
         records.push(record)
         next unless records.length == (task.batch_size || batch_size)
 
-        records = filter_out_processed(task, task_idx, records) if recover
+        records = filter_out_processed(task, task_idx, records)
         next unless records.length == (task.batch_size || batch_size)
 
         execute_document_task(task_idx, executor_key, records)
         records = []
         return if log.cancel
       end
-      records = filter_out_processed(task, task_idx, records) if recover
+      records = filter_out_processed(task, task_idx, records)
       execute_document_task(task_idx, executor_key, records) if records.any?
       return if log.cancel
       log_done!
