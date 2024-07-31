@@ -42,6 +42,23 @@ describe "Hekenga::DocumentTask (parallel)", type: :job do
         migration.perform_task!(0)
       }.to change(ActiveJob::Base.queue_adapter.enqueued_jobs, :size).by(2)
     end
+
+    it "should not double up" do
+      allow_any_instance_of(Hekenga::ParallelTask).to receive(:regenerate_executor_key).and_return("abc")
+      allow_any_instance_of(Hekenga::ParallelTask).to receive(:clear_task_records!)
+      # Create an existing document task record as a double up
+      Hekenga::DocumentTaskRecord.create!(
+        migration_key: migration.to_key,
+        task_idx: 0,
+        ids: [Example.last.id],
+        executor_key: "abc"
+      )
+      expect {
+        migration.perform_task!(0)
+        # Only one task gets queued, as the other one gets skipped
+      }.to change(ActiveJob::Base.queue_adapter.enqueued_jobs, :size).by(1)
+    end
+
     it "should carry out the migration" do
       perform_enqueued_jobs do
         migration.perform!
