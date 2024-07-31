@@ -2,7 +2,7 @@
 
 ## v2.0.0
 
-- `Hekenga::Iterator` has been replaced by `Hekenga::IdIterator`. If any
+- (breaking) `Hekenga::Iterator` has been replaced by `Hekenga::IdIterator`. If any
     selector or sort is set on a document task migration scope, it no longer forces an
     ascending ID sort. This should help to prevent index misses, though there is a
     tradeoff that documents being concurrently updated may be skipped or
