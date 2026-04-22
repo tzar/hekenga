@@ -107,6 +107,58 @@ describe "Hekenga::DocumentTask (parallel)", type: :job do
     end
   end
 
+  describe "scope with .includes" do
+    let(:migration) do
+      Hekenga.migration do
+        description "Includes test"
+        created "2024-01-01 00:00"
+        batch_size 3
+
+        per_document "Demo" do
+          scope Example.all.includes(:example_children)
+          parallel!
+
+          up do |doc|
+            doc.num = doc.example_children.map(&:value).sum
+          end
+        end
+      end
+    end
+
+    it "should eager load the relation instead of querying per document" do
+      examples = Example.all.to_a
+      examples.each do |ex|
+        ExampleChild.create!(example: ex, value: ex.num)
+      end
+
+      subscriber = Class.new {
+        attr_reader :child_finds
+        def initialize; @child_finds = 0; end
+        def started(event)
+          return unless event.command_name == "find"
+          return unless event.command["find"] == "example_children"
+          @child_finds += 1
+        end
+        def succeeded(_); end
+        def failed(_); end
+      }.new
+
+      client = Example.collection.client
+      client.subscribe(Mongo::Monitoring::COMMAND, subscriber)
+
+      perform_enqueued_jobs do
+        migration.perform!
+      end
+
+      client.unsubscribe(Mongo::Monitoring::COMMAND, subscriber)
+
+      expect(Example.asc(:_id).pluck(:num)).to eq([0, 1, 2])
+      # With eager loading: 1 batch query for all children
+      # Without eager loading: 1 query per document (3 queries)
+      expect(subscriber.child_finds).to eq(1)
+    end
+  end
+
   after do
     clear_enqueued_jobs
     clear_performed_jobs
