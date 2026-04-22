@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `per_document` task `scope` will no longer let you specify `.only` or
+    `.without` as it could potentially cause data loss.
+
 ## v2.0.0
 
 - (breaking) `Hekenga::Iterator` has been replaced by `Hekenga::IdIterator`. If any

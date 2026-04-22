@@ -6,6 +6,25 @@ describe Hekenga::DocumentTask do
       Example.create! string: "idx-#{idx}", num: idx
     end
   end
+  describe "scope with .only()" do
+    it "should raise an error to prevent data loss" do
+      expect {
+        Hekenga.migration do
+          description "Dangerous only scope"
+          created "2024-01-01 00:00"
+
+          per_document "Demo" do
+            scope Example.only(:string)
+
+            up do |doc|
+              doc.string = "modified"
+            end
+          end
+        end
+      }.to raise_error(Hekenga::Invalid, /\.only\(\) or \.without\(\)/)
+    end
+  end
+
   describe "single task up block" do
     let(:migration) do
       Hekenga.migration do
