@@ -24,6 +24,9 @@ module Hekenga
 
     def validate!
       raise Hekenga::Invalid.new(self, :ups, "missing") unless ups.any?
+      if scope&.options&.key?(:fields)
+        raise Hekenga::Invalid.new(self, :scope, "uses .only() or .without() which would cause data loss with replace_one")
+      end
     end
 
     def up!(context, document)
