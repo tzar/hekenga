@@ -131,31 +131,15 @@ describe "Hekenga::DocumentTask (parallel)", type: :job do
         ExampleChild.create!(example: ex, value: ex.num)
       end
 
-      subscriber = Class.new {
-        attr_reader :child_finds
-        def initialize; @child_finds = 0; end
-        def started(event)
-          return unless event.command_name == "find"
-          return unless event.command["find"] == "example_children"
-          @child_finds += 1
-        end
-        def succeeded(_); end
-        def failed(_); end
-      }.new
-
-      client = Example.collection.client
-      client.subscribe(Mongo::Monitoring::COMMAND, subscriber)
-
-      perform_enqueued_jobs do
-        migration.perform!
-      end
-
-      client.unsubscribe(Mongo::Monitoring::COMMAND, subscriber)
-
-      expect(Example.asc(:_id).pluck(:num)).to eq([0, 1, 2])
       # With eager loading: 1 batch query for all children
       # Without eager loading: 1 query per document (3 queries)
-      expect(subscriber.child_finds).to eq(1)
+      expect {
+        perform_enqueued_jobs do
+          migration.perform!
+        end
+      }.to query_model(ExampleChild).times(1)
+
+      expect(Example.asc(:_id).pluck(:num)).to eq([0, 1, 2])
     end
   end
 

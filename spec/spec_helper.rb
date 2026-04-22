@@ -8,6 +8,7 @@ require "database_cleaner-mongoid"
 require "hekenga"
 
 Dir["#{MODELS}/*.rb"].each {|f| require f}
+Dir[File.join(File.dirname(__FILE__), "support", "*.rb")].each {|f| require f}
 
 Mongoid.configure do |config|
   config.connect_to "hekenga_test"
