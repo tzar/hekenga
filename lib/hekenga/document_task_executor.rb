@@ -59,7 +59,11 @@ module Hekenga
     end
 
     def record_scope
-      task.scope.klass.unscoped.in(_id: task_record.ids)
+      scope = task.scope.klass.unscoped.in(_id: task_record.ids)
+      if task.scope.inclusions.any?
+        scope = scope.includes(*task.scope.inclusions.map(&:name))
+      end
+      scope
     end
 
     def records

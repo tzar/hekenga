@@ -7,6 +7,8 @@ class Example
   field :date
   field :num_copy
 
+  has_many :example_children
+
   validate do
     errors.add(:num, "Can't be 100") if num == 100
   end

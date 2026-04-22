@@ -4,6 +4,8 @@
 
 - `per_document` task `scope` will no longer let you specify `.only` or
     `.without` as it could potentially cause data loss.
+- `per_document` task `scope` now correctly works with `.includes` even
+    in parallel execution mode.
 
 ## v2.0.0
 
