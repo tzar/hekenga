@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v2.1.0
 
 - `per_document` task `scope` will no longer let you specify `.only` or
     `.without` as it could potentially cause data loss.
