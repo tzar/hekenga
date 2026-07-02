@@ -116,6 +116,8 @@ module Hekenga
     end
 
     def validate_records
+      return records_to_write.concat(migrated_records) if task.skip_validation
+
       migrated_records.each do |record|
         if record.valid?
           records_to_write << record

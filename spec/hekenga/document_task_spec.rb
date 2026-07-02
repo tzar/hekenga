@@ -115,6 +115,49 @@ describe Hekenga::DocumentTask do
     end
   end
 
+  describe "skip_validation!" do
+    let(:migration) do
+      Hekenga.migration do
+        description "Skip validation"
+        created "2024-07-02 10:00"
+
+        per_document "Demo" do
+          scope Example.all
+          skip_validation!
+
+          up do |doc|
+            doc.num = 100
+          end
+        end
+      end
+    end
+
+    it "sets skip_validation on the task" do
+      expect(migration.tasks[0].skip_validation).to eq(true)
+    end
+
+    it "writes records that would otherwise be invalid" do
+      migration.perform!
+      expect(Example.pluck(:num)).to eq([100, 100, 100])
+      records = migration.task_records(0)
+      expect(records.map(&:invalid_ids).flatten).to be_empty
+      expect(records.map(&:written_ids).flatten.length).to eq(3)
+    end
+
+    it "defaults to false" do
+      other = Hekenga.migration do
+        description "No skip validation"
+        created "2024-07-02 10:05"
+
+        per_document "Demo" do
+          scope Example.all
+          up { |doc| doc.num += 1 }
+        end
+      end
+      expect(other.tasks[0].skip_validation).to eq(false)
+    end
+  end
+
   describe "setup block accepting docs" do
     let(:migration) do
       Hekenga.migration do

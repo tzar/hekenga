@@ -56,6 +56,10 @@ module Hekenga
         @object.skip_prepare = true
       end
 
+      def skip_validation!
+        @object.skip_validation = true
+      end
+
       def setup(&block)
         @object.setups.push block
       end
