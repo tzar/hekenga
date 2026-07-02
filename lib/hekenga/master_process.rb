@@ -33,18 +33,35 @@ module Hekenga
       true
     end
 
+    def watch!(interval: Hekenga.config.report_sleep)
+      if Hekenga.status(@migration) == :naught
+        Hekenga.log "Migration #{@migration.to_key} has not started yet."
+        return false
+      end
+      Hekenga.log "Watching migration #{@migration.to_key}: #{@migration.description}"
+      @migration.tasks.each.with_index do |task, idx|
+        report_while_active(task, idx, interval: interval)
+      rescue Hekenga::TaskFailedError
+        return false
+      end
+      true
+    end
+
     private
 
-    def report_while_active(task, idx)
-      # Wait for the log to be generated
+    def report_while_active(task, idx, interval: Hekenga.config.report_sleep)
+      # Wait for the log to be generated. When watching an out-of-process
+      # migration there is no @active_thread guaranteeing it, so bail out if
+      # the migration finished without ever reaching this task.
       until (@migration.log(idx) rescue nil)
+        return if %i[complete skipped].include?(Hekenga.status(@migration))
         sleep 1
       end
-      # Periodically report on thread progress
+      # Periodically report on progress
       until @migration.log(idx).reload.done
-        @active_thread.join
+        @active_thread&.join
         report_status(task, idx)
-        sleep Hekenga.config.report_sleep
+        sleep interval
       end
       report_status(task, idx) if task.is_a?(Hekenga::DocumentTask)
       report_result(task, idx)

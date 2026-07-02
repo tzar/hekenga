@@ -71,6 +71,14 @@ class HekengaCLI < Thor
     end
   end
 
+  desc "watch PATH_OR_PKEY", "Attach to a running migration and report its status periodically."
+  option :interval, type: :numeric, desc: "Seconds between status reports (default: Hekenga.config.report_sleep)."
+  def watch(path_or_pkey)
+    migration = load_migration(path_or_pkey)
+    interval  = options[:interval] || Hekenga.config.report_sleep
+    Hekenga::MasterProcess.new(migration).watch!(interval: interval)
+  end
+
   desc "cancel", "Cancel all active migrations."
   def cancel
     Hekenga::Log.where(done: false).set(cancel: true)
