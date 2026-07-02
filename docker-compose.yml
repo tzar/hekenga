@@ -9,22 +9,41 @@ networks:
 services:
   mongo:
     image: mongo:6
-    command: ["--replSet", "rs0", "--bind_ip", "localhost,mongo"]
+    command: ["--replSet", "rs0", "--bind_ip_all"]
     volumes:
       - mongo:/data/db
     ports:
       - 27017:27017
     networks:
       - hekenga-net
+    healthcheck:
+      # mongo:6 ships mongosh (the legacy `mongo` shell was removed in 6.0).
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
   mongosetup:
     image: mongo:6
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
     restart: "no"
     entrypoint:
-      - bash
-      - "-c"
-      - "sleep 3 && mongo --host mongo:27017 --eval 'rs.initiate({_id: \"rs0\", members: [{_id: 0, host: \"localhost:27017\"}]})'"
+      - mongosh
+      - "--quiet"
+      - "--host"
+      - "mongo:27017"
+      - "--eval"
+      # Idempotent: initiate the single-member replica set only if it hasn't
+      # been configured yet, so re-running compose doesn't error. The member
+      # advertises as localhost:27017 so the driver on the host can reach it
+      # after replica-set topology discovery (required for transactions).
+      - >
+        try { rs.status(); print('replica set already initialised'); }
+        catch (e) {
+          rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]});
+          print('replica set initiated');
+        }
     networks:
       - hekenga-net
