@@ -6,6 +6,7 @@ require "hekenga/config"
 require "hekenga/irreversible"
 require "hekenga/virtual_method"
 require "hekenga/scaffold"
+require "hekenga/failure_report"
 
 module Hekenga
   @@load_all_mutex = Mutex.new
