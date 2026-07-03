@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.2.0
+
+- Added a `hekenga watch <path_or_pkey>` CLI command to attach to a running
+    migration and report its status periodically. Accepts an `--interval`
+    option (defaults to `Hekenga.config.report_sleep`).
+- Added a `hekenga failures <path_or_pkey>` CLI command to print all failed and
+    invalid document IDs across a migration's document tasks.
+- Document tasks now support a `skip_validation!` option to write documents
+    without running `.valid?`.
+
 ## v2.1.0
 
 - `per_document` task `scope` will no longer let you specify `.only` or
