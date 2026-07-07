@@ -11,7 +11,17 @@ Dir["#{MODELS}/*.rb"].each {|f| require f}
 Dir[File.join(File.dirname(__FILE__), "support", "*.rb")].each {|f| require f}
 
 Mongoid.configure do |config|
-  config.connect_to "hekenga_test"
+  config.clients.default = {
+    hosts: [ENV.fetch("MONGO_HOST", "localhost:27017")],
+    database: "hekenga_test",
+    options: {
+      # The test cluster (see docker-compose.yml) is a single-member replica
+      # set advertising itself as "localhost:27017". We must let the driver
+      # perform replica-set topology discovery (i.e. NOT set direct_connection)
+      # so that Cluster#replica_set? is true and transactions are permitted.
+      replica_set: "rs0"
+    }
+  }
   config.logger = nil
 end
 Hekenga.configure do |config|

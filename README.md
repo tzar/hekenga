@@ -43,6 +43,8 @@ $ hekenga run! <path_or_pkey>           # Run a specific migration
 $ hekenga run! <path_or_pkey> --test    # Dry run (no writes persisted)
 $ hekenga run! <path_or_pkey> --clear   # Clear logs before running
 $ hekenga recover! <path_or_pkey>       # Re-process failed/invalid records
+$ hekenga watch <path_or_pkey>          # Attach to a running migration, report status periodically
+$ hekenga failures <path_or_pkey>       # Print all failed/invalid document IDs for a migration
 $ hekenga cancel                        # Cancel all active migrations
 $ hekenga skip <path_or_pkey>           # Mark a migration as skipped
 $ hekenga clear! <path_or_pkey>         # Remove all logs/failures for a migration
@@ -118,6 +120,7 @@ per_document "Process records" do
   timeless!                           # Don't update Mongoid timestamps
   always_write!                       # Write even if the document didn't change
   skip_prepare!                       # Skip Mongoid callbacks on load
+  skip_validation!                    # Write documents without running Mongoid validations
   use_transaction!                    # Wrap each batch in a MongoDB transaction
   batch_size 50                       # Override migration-level batch size
   write_strategy :update              # :update (default) or :delete_then_insert
@@ -143,11 +146,24 @@ Or via the CLI:
 
     $ hekenga run! <path_or_pkey> --test
 
+### Monitoring
+
+Attach to a migration that's already running (for example one launched in another process or via a background job) and print its status on a fixed interval:
+
+    $ hekenga watch <path_or_pkey>
+    $ hekenga watch <path_or_pkey> --interval 5   # report every 5 seconds
+
+The reporting interval defaults to `Hekenga.config.report_sleep`.
+
 ### Recovery
 
 When a migration fails (due to errors, invalid records, or write failures), Hekenga logs the failures and marks the migration as failed. You can re-process only the failed records:
 
     $ hekenga recover! <path_or_pkey>
+
+To inspect exactly which documents failed or were invalid across all document tasks in a migration:
+
+    $ hekenga failures <path_or_pkey>
 
 ## Development
 
